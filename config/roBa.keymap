@@ -80,10 +80,10 @@
 
         default_layer {
             bindings = <
-&kp Q             &kp W         &kp E         &kp R                        &kp T                                                          &kp Y        &kp U  &lt 5 I    &kp O    &kp P
-&mt TAB A         &kp S         &kp D         &kp F                        &kp G        &kp LS(LG(S))                    &kp EXCLAMATION  &kp H        &kp J  &kp K      &kp L    &lt 5 MINUS
-&mt LEFT_SHIFT Z  &kp X         &kp C         &kp V                        &kp B        &kp COLON                        &kp QUESTION     &kp N        &kp M  &kp COMMA  &kp DOT  &kp SLASH
-&kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT  &lt_to_layer_0 6 LANGUAGE_1  &lt 1 SPACE  &lt_to_layer_0 3 LANGUAGE_2      &lt 3 BACKSPACE  &lt 2 ENTER                             &kp DEL
+&kp Q             &kp W         &kp E         &kp R                &kp T                                                          &kp Y        &kp U  &lt 5 I    &kp O    &kp P
+&mt TAB A         &kp S         &kp D         &kp F                &kp G        &kp LS(LG(S))                    &kp EXCLAMATION  &kp H        &kp J  &kp K      &kp L    &lt 5 MINUS
+&mt LEFT_SHIFT Z  &kp X         &kp C         &kp V                &kp B        &kp COLON                        &kp QUESTION     &kp N        &kp M  &kp COMMA  &kp DOT  &lt 4 HASH
+&kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT  &mt LCMD LANGUAGE_1  &lt 1 SPACE  &lt_to_layer_0 3 LANGUAGE_2      &lt 3 BACKSPACE  &lt 2 ENTER                             &kp DEL
             >;
 
             sensor-bindings = <&inc_dec_kp PG_UP PAGE_DOWN>;
@@ -92,7 +92,7 @@
         FUNCTION {
             bindings = <
 &trans  &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp LEFT_BRACKET  &kp RIGHT_BRACKET                       &kp F7  &kp F8  &kp F9  &kp F10  &kp F5
-&trans  &kp AT_SIGN           &kp PERCENT            &trans            &trans             &trans      &kp F13  &kp F7  &kp F8  &kp F8  &kp F10  &kp F10
+&trans  &kp AT_SIGN           &kp PERCENT            &kp HASH          &trans             &trans      &kp F13  &kp F7  &kp F8  &kp F8  &kp F10  &kp F10
 &trans  &trans                &trans                 &trans            &trans             &trans      &trans   &trans  &trans  &trans  &trans   &kp F11
 &trans  &trans                &trans                 &trans            &trans             &trans      &trans   &trans                           &kp F12
             >;
