@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resolve-assist"
+version = "0.1.0"
+description = "DaVinci Resolve 編集補助ツール: 無音カット・フィラー検出・シーン検出・字幕生成"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+# 文字起こし(字幕生成・フィラー検出)を使う場合
+transcribe = ["faster-whisper>=1.0"]
+# シーン検出を使う場合
+scenes = ["scenedetect[opencv]>=0.6"]
+# 全部入り
+full = ["faster-whisper>=1.0", "scenedetect[opencv]>=0.6"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+resolve-assist = "resolve_assist.cli:main"
+resolve-assist-gui = "resolve_assist.gui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["resolve_assist*"]

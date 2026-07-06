@@ -1,0 +1,129 @@
+# Resolve Assist — DaVinci Resolve 編集補助ツール
+
+トーク系動画の編集を時短するためのツールです。動画を解析して、以下を自動化します。
+
+- **無音部分の自動カット** — 無音区間を検出し、発話部分だけを並べたタイムラインを生成
+- **フィラー語の検出** — 「えー」「あの」「えっと」等を検出し、カット候補としてマーカー表示(オプションで自動カット)
+- **シーン検出** — 映像の切り替わりにマーカーを配置
+- **字幕生成** — Whisper によるローカル文字起こし → 日本語向けに整形した SRT を生成
+
+すべてオフライン・無料で動作します(クラウド API 不使用)。
+
+## 対応環境
+
+- macOS (Apple Silicon / Intel)
+- DaVinci Resolve **無償版 / Studio 両対応**
+  - 無償版: 解析結果を Resolve 内のスクリプトメニューから適用(本ツールが対応済み)
+  - Studio: GUI の「Resolveへ直接適用」ボタンでワンクリック適用
+- Python 3.10 以上
+
+## セットアップ
+
+### 1. ffmpeg と Python
+
+```bash
+brew install ffmpeg python@3.12
+```
+
+### 2. Resolve Assist のインストール
+
+このリポジトリの `resolve-assist/` フォルダで:
+
+```bash
+cd resolve-assist
+pip3 install -e '.[full]'      # 全機能 (Whisper文字起こし + シーン検出)
+# 最小構成 (無音カットのみ) なら: pip3 install -e .
+```
+
+### 3. Resolve 内スクリプトのインストール
+
+```bash
+./install_resolve_scripts.sh
+```
+
+DaVinci Resolve の **Workspace > Scripts > Utility** メニューに
+`ResolveAssist_ApplyCuts` と `ResolveAssist_ImportSRT` が追加されます
+(表示されない場合は Resolve を再起動)。
+
+## 使い方
+
+### GUI で使う
+
+```bash
+resolve-assist-gui
+```
+
+1. 動画ファイルを選択
+2. 実行する処理にチェック(無音カット / 字幕 / フィラー検出 / シーン検出)
+3. 「解析実行」を押す
+   - 初回は Whisper モデルのダウンロードで数分かかります
+4. 完了したら DaVinci Resolve 側で:
+   - **Workspace > Scripts > Utility > ResolveAssist_ApplyCuts** を実行
+     → 発話部分だけを並べたタイムラインが自動生成され、フィラー位置に赤マーカーが付く
+   - 字幕を作った場合は **ResolveAssist_ImportSRT** を実行
+     → SRT がメディアプールに入るので、右クリック →「選択した字幕をタイムラインに挿入」
+
+Resolve 側のスクリプトは「最後に解析した動画」を自動で見つけるので、
+ファイル選択などの操作は不要です。
+
+### CLI で使う
+
+```bash
+# 無音カットのみ
+resolve-assist analyze talk.mp4
+
+# 無音カット + 字幕 + フィラー検出
+resolve-assist analyze talk.mp4 --subtitles --fillers
+
+# フィラーも自動カットに含める / 高精度モデルを使う
+resolve-assist analyze talk.mp4 --subtitles --cut-fillers --model medium
+
+# パラメータ調整の例 (静かな環境の録音なら -45dB 程度がおすすめ)
+resolve-assist analyze talk.mp4 --silence-db -45 --min-silence 0.5
+```
+
+### 出力ファイル
+
+`<動画名>_assist/` フォルダに出力されます。
+
+| ファイル | 内容 |
+|---|---|
+| `cuts.json` | カットリスト(Resolve 内スクリプトが読む) |
+| `timeline.edl` | カット済みタイムラインの EDL(保険用・下記参照) |
+| `subtitles.srt` | 生成した字幕 |
+| `transcript.txt` | 文字起こし全文 |
+| `fillers.txt` | 検出したフィラー語の一覧(時刻付き) |
+
+### EDL を使う場合(スクリプトが使えないとき)
+
+1. Resolve のメディアプールに元動画を取り込む
+2. **File > Import > Timeline** で `timeline.edl` を選択
+3. フレームレートを動画に合わせて読み込む
+
+## パラメータの目安
+
+| パラメータ | 既定値 | 説明 |
+|---|---|---|
+| 無音しきい値 | -35 dB | 声が小さい/ノイズが多い録音は -30、静かな録音は -45 に |
+| 最小無音長 | 0.35 秒 | 短くすると細かく刻む。テンポ重視なら 0.25 |
+| 頭/尻マージン | 0.10 / 0.15 秒 | 語頭・語尾が切れる場合は増やす |
+| Whisper モデル | small | 速度重視 base、精度重視 medium |
+
+フィラー辞書は `--filler-dict my_fillers.txt`(1行1語)で差し替えできます。
+
+## 仕組みと制約
+
+- **無償版 Resolve は外部アプリからの制御ができない**(Studio のみ)ため、
+  「①このツールで解析してファイル生成 → ②Resolve 内のスクリプトで適用」の2段構成です。
+  解析結果の受け渡しは `~/.resolve_assist/latest.json` 経由で自動化しています。
+- Studio 版に移行すると、GUI の「Resolveへ直接適用 (Studio)」ボタンが使えるようになり、
+  Resolve 側の操作なしでタイムラインが生成されます。
+- フィラー検出は Whisper の単語タイムスタンプに依存するため、多少の誤検出・取りこぼしがあります。
+  既定ではカットせずマーカー提示に留めているのはこのためです。
+
+## 開発
+
+```bash
+pip3 install -e '.[dev]'
+pytest tests/
+```
