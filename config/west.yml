@@ -4,10 +4,6 @@ manifest:
       url-base: https://github.com/zmkfirmware
     - name: kumamuk-git
       url-base: https://github.com/kumamuk-git
-    - name: zzeneg
-      url-base: https://github.com/zzeneg
-    - name: srwi
-      url-base: https://github.com/srwi
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -16,11 +12,5 @@ manifest:
     - name: zmk-pmw3610-driver
       remote: kumamuk-git
       revision: main
-    - name: zmk-raw-hid
-      remote: zzeneg
-      revision: main
-    - name: zmk-keypeek-layer-notifier
-      remote: srwi
-      revision: master
   self:
     path: config
