@@ -3,7 +3,7 @@
 #   cp config.example.yaml config.yaml
 
 sources:
-  # Pinterest 公式 API v5(要 PINTEREST_ACCESS_TOKEN 環境変数)
+  # Pinterest 公式 API v5(要アクセストークン。自動更新の設定は README 参照)
   api:
     enabled: false
     queries:
@@ -55,3 +55,6 @@ output:
 
 # 収集済みピンの記録(重複防止)
 state_file: "./state.json"
+
+# アクセストークン/リフレッシュトークンのキャッシュ(--setup-auth で自動生成)
+token_cache_file: "./token_cache.json"

@@ -8,6 +8,7 @@ import sys
 from . import config as config_mod
 from .downloader import download_pin
 from .models import Pin
+from .oauth import PinterestAuth, run_interactive_setup
 from .scoring import score_pins
 from .sources import fetch_api_pins, fetch_rss_pins
 from .sources.api import save_pin_to_board
@@ -16,20 +17,36 @@ from .state import State
 log = logging.getLogger("collector")
 
 
+def build_auth(cfg: dict) -> PinterestAuth | None:
+    creds = config_mod.api_credentials()
+    if not creds["access_token"] and not creds["refresh_token"]:
+        return None
+    return PinterestAuth(
+        cache_path=cfg["token_cache_file"],
+        client_id=creds["client_id"],
+        client_secret=creds["client_secret"],
+        initial_access_token=creds["access_token"],
+        initial_refresh_token=creds["refresh_token"],
+    )
+
+
 def collect(cfg: dict, dry_run: bool = False) -> int:
-    token = config_mod.api_token()
     sources_cfg = cfg["sources"]
     pins: list[Pin] = []
 
+    auth = build_auth(cfg) if sources_cfg["api"]["enabled"] else None
     if sources_cfg["api"]["enabled"]:
-        if token:
+        if auth:
             pins += fetch_api_pins(
-                token,
+                auth,
                 sources_cfg["api"].get("queries", []),
                 per_query=int(sources_cfg["api"].get("per_query", 25)),
             )
         else:
-            log.warning("API source is enabled but PINTEREST_ACCESS_TOKEN is not set; skipping.")
+            log.warning(
+                "API source is enabled but no credentials are set "
+                "(PINTEREST_ACCESS_TOKEN or PINTEREST_REFRESH_TOKEN); skipping."
+            )
 
     if sources_cfg["rss"]["enabled"]:
         pins += fetch_rss_pins(sources_cfg["rss"].get("feeds", []))
@@ -65,8 +82,8 @@ def collect(cfg: dict, dry_run: bool = False) -> int:
             continue
         if download_pin(pin, cfg["output"]["download_dir"]):
             downloaded += 1
-        if board_id and token and pin.source == "api":
-            save_pin_to_board(token, pin.id, str(board_id))
+        if board_id and auth and pin.source == "api":
+            save_pin_to_board(auth, pin.id, str(board_id))
         state.mark_seen(pin.id)
 
     if not dry_run:
@@ -86,6 +103,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--config", "-c", default="config.yaml", help="Path to config YAML")
     parser.add_argument("--dry-run", action="store_true", help="Score and list pins without downloading or saving")
+    parser.add_argument(
+        "--setup-auth",
+        action="store_true",
+        help="One-time interactive authorization to obtain a refresh token (requires "
+        "PINTEREST_CLIENT_ID/SECRET); then exits",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -94,6 +117,11 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(message)s",
     )
     cfg = config_mod.load_config(args.config)
+
+    if args.setup_auth:
+        creds = config_mod.api_credentials()
+        return run_interactive_setup(cfg, creds["client_id"], creds["client_secret"])
+
     return collect(cfg, dry_run=args.dry_run)
 
 

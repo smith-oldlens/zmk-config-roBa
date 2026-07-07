@@ -1,7 +1,7 @@
 """Pinterest official API v5 source.
 
-Requires the PINTEREST_ACCESS_TOKEN environment variable and an app with
-access to the pins search scope. See README for how to obtain a token.
+Requires a PinterestAuth instance (see ../oauth.py) which supplies a valid,
+auto-refreshing access token. See README for how to obtain credentials.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import logging
 import requests
 
 from ..models import Pin
+from ..oauth import PinterestAuth, authed_request
 
 log = logging.getLogger(__name__)
 
@@ -28,14 +29,14 @@ def _best_image_url(media: dict) -> str:
     return ""
 
 
-def fetch_api_pins(token: str, queries: list[str], per_query: int = 25) -> list[Pin]:
+def fetch_api_pins(auth: PinterestAuth, queries: list[str], per_query: int = 25) -> list[Pin]:
     pins: list[Pin] = []
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {token}"
 
     for query in queries:
         try:
-            resp = session.get(
+            resp = authed_request(
+                auth,
+                "GET",
                 f"{API_BASE}/search/pins",
                 params={"query": query, "page_size": min(per_query, 50)},
                 timeout=30,
@@ -59,12 +60,13 @@ def fetch_api_pins(token: str, queries: list[str], per_query: int = 25) -> list[
     return pins
 
 
-def save_pin_to_board(token: str, pin_id: str, board_id: str) -> bool:
+def save_pin_to_board(auth: PinterestAuth, pin_id: str, board_id: str) -> bool:
     """Save an existing pin to one of your boards (API: POST /pins/{id}/save)."""
     try:
-        resp = requests.post(
+        resp = authed_request(
+            auth,
+            "POST",
             f"{API_BASE}/pins/{pin_id}/save",
-            headers={"Authorization": f"Bearer {token}"},
             json={"board_id": str(board_id)},
             timeout=30,
         )

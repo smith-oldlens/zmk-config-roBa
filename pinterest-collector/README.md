@@ -35,15 +35,40 @@ https://www.pinterest.com/<ユーザー名>/<ボード名>.rss    # 特定のボ
 
 ### 公式 API を使う(キーワード検索・ボード自動保存)
 
-1. <https://developers.pinterest.com/> でアプリを作成
-2. `pins:read`(検索)と `boards:write`・`pins:write`(ボード保存を使う場合)のスコープでアクセストークンを取得
-3. 環境変数に設定:
+#### かんたん版(手動更新・お試し)
+
+1. <https://developers.pinterest.com/apps/> でアプリを作成(Trial Access が自動付与、無料)
+2. アプリ管理画面からアクセストークンを発行し、環境変数に設定:
 
 ```bash
 export PINTEREST_ACCESS_TOKEN="xxxxx"
 ```
 
-4. `config.yaml` で `sources.api.enabled: true` にして `queries` を設定
+3. `config.yaml` で `sources.api.enabled: true` にして `queries` を設定
+
+この方法はトークンが約30日で失効するため、その都度再発行が必要です。
+
+#### 自動更新版(リフレッシュトークン・おすすめ)
+
+一度セットアップすれば、以後トークンを手動で貼り直す必要がなくなります。
+
+1. アプリ管理画面で **Client ID** と **Client Secret** を確認し、環境変数に設定:
+
+```bash
+export PINTEREST_CLIENT_ID="xxxxx"
+export PINTEREST_CLIENT_SECRET="xxxxx"
+```
+
+2. 初回だけ、対話形式のセットアップコマンドを実行:
+
+```bash
+python -m collector --config config.yaml --setup-auth
+```
+
+表示されたURLをブラウザで開いて認可し、リダイレクト先URL(`?code=...` を含む)をそのまま貼り付けます。成功すると `token_cache_file`(既定で `token_cache.json`)にアクセストークンとリフレッシュトークンが保存されます。
+
+3. 以降は `python -m collector -c config.yaml` を実行するだけで、トークンが期限切れの場合は自動的に更新されます
+4. GitHub Actions で使う場合は、コマンドの出力に表示される `PINTEREST_CLIENT_ID` / `PINTEREST_CLIENT_SECRET` / `PINTEREST_REFRESH_TOKEN` をリポジトリの Secrets に登録してください(ワークフローは `token_cache.json` もキャッシュするため、Actions 上でも自動更新が継続します)
 
 ## 実行
 

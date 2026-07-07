@@ -23,6 +23,7 @@ DEFAULTS = {
         "max_items_per_run": 30,
     },
     "state_file": "./state.json",
+    "token_cache_file": "./token_cache.json",
 }
 
 
@@ -47,8 +48,22 @@ def load_config(path: str | Path) -> dict:
     base = path.parent
     cfg["output"]["download_dir"] = str((base / cfg["output"]["download_dir"]).resolve())
     cfg["state_file"] = str((base / cfg["state_file"]).resolve())
+    cfg["token_cache_file"] = str((base / cfg["token_cache_file"]).resolve())
     return cfg
 
 
-def api_token() -> str | None:
-    return os.environ.get("PINTEREST_ACCESS_TOKEN")
+def api_credentials() -> dict:
+    """Pinterest API credentials from the environment.
+
+    - PINTEREST_ACCESS_TOKEN alone works but expires (~30 days) with no
+      automatic renewal.
+    - Adding PINTEREST_CLIENT_ID/SECRET + PINTEREST_REFRESH_TOKEN (obtained
+      once via `python -m collector --setup-auth`) enables auto-refresh, so
+      the token never needs to be manually replaced again.
+    """
+    return {
+        "client_id": os.environ.get("PINTEREST_CLIENT_ID"),
+        "client_secret": os.environ.get("PINTEREST_CLIENT_SECRET"),
+        "access_token": os.environ.get("PINTEREST_ACCESS_TOKEN"),
+        "refresh_token": os.environ.get("PINTEREST_REFRESH_TOKEN"),
+    }
