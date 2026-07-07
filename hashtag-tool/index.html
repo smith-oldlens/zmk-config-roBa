@@ -145,8 +145,12 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
   <!-- ============ 生成 ============ -->
   <section class="panel active" id="panel-gen">
     <div class="card">
-      <h2>今回のタグセット</h2>
-      <p class="hint">「生成」を押すたびに、前回と重なりすぎない組み合わせを作ります。</p>
+      <h2>今回の投稿</h2>
+      <p class="hint">「生成」を押すたびに、前回と重なりすぎない組み合わせを作ります。コピーすると本文+ハッシュタグがまとめてコピーされ、そのままInstagramに貼り付けられます。</p>
+      <div class="field">
+        <label for="caption">キャプション(本文)</label>
+        <textarea id="caption" placeholder="投稿の本文をここに入力…" style="min-height:80px"></textarea>
+      </div>
       <div class="legend">
         <span><i class="dot big"></i>ビッグ(投稿数 多)</span>
         <span><i class="dot mid"></i>ミドル</span>
@@ -154,10 +158,10 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
       </div>
       <p class="stats" id="genStats">まだ生成していません</p>
       <div class="result-tags" id="resultChips"></div>
-      <textarea id="resultText" readonly placeholder="ここに生成結果が表示されます"></textarea>
+      <textarea id="resultText" readonly placeholder="ここに本文+ハッシュタグの完成形が表示されます" style="min-height:150px"></textarea>
       <div class="actions">
         <button class="btn" id="btnShuffle" disabled>並びシャッフル</button>
-        <button class="btn" id="btnCopy" disabled>コピー</button>
+        <button class="btn" id="btnCopy" disabled>まとめてコピー</button>
       </div>
       <div class="actions">
         <button class="btn primary" id="btnGenerate">タグセットを生成</button>
@@ -175,10 +179,10 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
         <div class="checks" id="catChecks"></div>
       </div>
       <div class="field">
-        <label>コピー時の区切り</label>
+        <label>ハッシュタグの並べ方</label>
         <div class="checks" id="sepChecks">
-          <label><input type="radio" name="sep" value="space" checked>スペース</label>
-          <label><input type="radio" name="sep" value="newline">改行</label>
+          <label><input type="radio" name="sep" value="newline" checked>縦(1行に1つ)</label>
+          <label><input type="radio" name="sep" value="space">横(スペース区切り)</label>
         </div>
       </div>
       <p class="note">目安の配合 — ビッグ約2割・ミドル約5割・ニッチ約3割。直前のセットと同じタグは半分以上入れ替わるように選びます。</p>
@@ -306,7 +310,8 @@ function freshState(){
     tags: PRESET.tags.map(([name,size,cat],i)=>({id:i+1, name, size, cat, used:0})),
     cats: PRESET.cats.slice(),
     history: [],
-    settings: {count:15, sep:"space", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1},
+    settings: {count:15, sep:"newline", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1},
+    caption: "",
     current: null
   };
 }
@@ -314,6 +319,8 @@ let S;
 try{ S = JSON.parse(localStorage.getItem(KEY)) || freshState(); }
 catch(e){ S = freshState(); }
 if(!S.tags || !S.cats) S = freshState();
+if(S.caption === undefined) S.caption = "";
+if(!S.settings.sepMigrated){ S.settings.sep = "newline"; S.settings.sepMigrated = 1; } // 縦並びを新デフォルトに
 
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
@@ -338,6 +345,11 @@ async function copyText(text){
   }
 }
 function fmt(tags){ return tags.map(t=>"#"+t).join(S.settings.sep==="newline" ? "\n" : " "); }
+function fullText(){
+  const cap = (S.caption || "").trim();
+  const tags = fmt(S.current || []);
+  return cap ? cap + "\n\n" + tags : tags;
+}
 
 /* ---------- 生成ロジック ---------- */
 function weightedPick(pool, n, avoid){
@@ -403,7 +415,7 @@ function renderResult(){
     const t = tagByName(n), size = t ? t.size : "mid";
     return `<span class="tagchip"><i class="dot ${size}"></i>#${esc(n)}</span>`;
   }).join("");
-  $("#resultText").value = fmt(S.current);
+  $("#resultText").value = fullText();
   $("#btnCopy").disabled = $("#btnShuffle").disabled = false;
 }
 function renderCatChecks(){
@@ -462,6 +474,7 @@ document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("clic
 }));
 $("#cntRange").value = S.settings.count;
 $("#cntLabel").textContent = S.settings.count;
+$("#caption").value = S.caption;
 $("#cntRange").addEventListener("input", e=>{
   S.settings.count = Number(e.target.value);
   $("#cntLabel").textContent = e.target.value; save();
@@ -472,9 +485,13 @@ document.querySelectorAll('input[name=sep]').forEach(el=>{
 });
 $("#btnGenerate").addEventListener("click", generate);
 $("#btnShuffle").addEventListener("click", ()=>{ shuffle(S.current); save(); renderResult(); });
+$("#caption").addEventListener("input", e=>{
+  S.caption = e.target.value; save();
+  if(S.current && S.current.length) $("#resultText").value = fullText();
+});
 $("#btnCopy").addEventListener("click", async ()=>{
   if(!S.current) return;
-  if(!(await copyText(fmt(S.current)))){ toast("コピーできませんでした"); return; }
+  if(!(await copyText(fullText()))){ toast("コピーできませんでした"); return; }
   // コピー = 採用とみなして履歴と使用回数を更新
   S.current.forEach(n=>{ const t=tagByName(n); if(t) t.used++; });
   const d = new Date();
@@ -483,7 +500,7 @@ $("#btnCopy").addEventListener("click", async ()=>{
     S.history.unshift({when, tags:S.current.slice()});
     S.history = S.history.slice(0,20);
   }
-  save(); toast("コピーしました(履歴に保存)");
+  save(); toast("本文+タグをコピーしました。Instagramに貼り付けてください");
 });
 $("#btnAdd").addEventListener("click", ()=>{
   const raw = $("#addName").value.trim();
@@ -516,9 +533,11 @@ $("#btnImport").addEventListener("click", ()=>{
   try{
     const d = JSON.parse($("#ioArea").value);
     if(!d.tags || !d.cats) throw 0;
+    if(d.caption === undefined) d.caption = "";
     S = d; save();
     renderCatChecks(); renderTagList(); renderHistory(); renderResult();
     $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
+    $("#caption").value = S.caption;
     toast("取り込みました");
   }catch(e){ toast("取り込めませんでした。書き出したテキストをそのまま貼り付けてください"); }
 });
@@ -526,6 +545,8 @@ $("#btnReset").addEventListener("click", ()=>{
   if(!confirm("登録タグ・履歴をすべて消して初期データに戻します。よろしいですか?")) return;
   S = freshState(); save();
   renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+  $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
+  $("#caption").value = S.caption;
   toast("初期データに戻しました");
 });
 
