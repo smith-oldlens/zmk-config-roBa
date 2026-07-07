@@ -1,0 +1,93 @@
+# roBa AdBlock - blocked ad/tracker domains
+# One domain per line. Subdomains are blocked automatically
+# (e.g. "doubleclick.net" also blocks "ad.doubleclick.net").
+# Lines may also use hosts-file format: "0.0.0.0 example.com".
+#
+# The list is intentionally conservative: only well-known ad/tracking
+# networks, so that normal site features (login, video, maps, ...) keep
+# working.
+
+# --- Google ads ---
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+adservice.google.com
+adservice.google.co.jp
+googletagservices.com
+google-analytics.com
+admob.com
+
+# --- Major ad exchanges / SSP / DSP ---
+adnxs.com
+adsrvr.org
+criteo.com
+criteo.net
+pubmatic.com
+rubiconproject.com
+openx.net
+casalemedia.com
+adform.net
+bidswitch.net
+smaato.net
+smartadserver.com
+teads.tv
+media.net
+33across.com
+sharethrough.com
+indexww.com
+yieldmo.com
+zedo.com
+
+# --- Native ad / recommendation widgets ---
+taboola.com
+outbrain.com
+revcontent.com
+mgid.com
+
+# --- Amazon ads ---
+amazon-adsystem.com
+
+# --- Mobile in-app ad networks ---
+applovin.com
+chartboost.com
+inmobi.com
+adcolony.com
+vungle.com
+ironsrc.com
+supersonicads.com
+startappservice.com
+mopub.com
+
+# --- Aggressive / popup ad networks ---
+popads.net
+propellerads.com
+exoclick.com
+adsterra.com
+hilltopads.net
+onclickads.net
+
+# --- Trackers / measurement ---
+scorecardresearch.com
+quantserve.com
+moatads.com
+adjust.com
+appsflyer.com
+branch.io
+hotjar.com
+mouseflow.com
+
+# --- Japanese ad networks ---
+i-mobile.co.jp
+nend.net
+adstir.com
+microad.jp
+amoad.com
+adingo.jp
+fluct.jp
+socdm.com
+zucks.net
+gmossp-sp.jp
+adfurikun.jp
+fout.jp
+im-apps.net
+yads.c.yimg.jp

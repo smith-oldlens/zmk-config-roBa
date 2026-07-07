@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">roBa AdBlock</string>
+    <string name="status_on">広告ブロック: 有効</string>
+    <string name="status_off">広告ブロック: 停止中</string>
+    <string name="button_start">ブロックを開始</string>
+    <string name="button_stop">ブロックを停止</string>
+    <string name="notification_channel">広告ブロックVPN</string>
+    <string name="notification_running">広告ドメインへのDNS問い合わせをブロック中</string>
+    <string name="description">ローカルVPNとしてDNSの問い合わせだけを検査し、広告・トラッカーのドメインをブロックします。\n\nDNS以外の通信はVPNを通らないため、速度や他のアプリの動作には影響しません。通信内容が外部サーバーに送られることもありません。</string>
+</resources>
