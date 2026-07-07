@@ -25,6 +25,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("analyze", help="動画を解析して cuts.json / EDL / SRT を出力する")
     p.add_argument("video", help="対象の動画ファイル")
     p.add_argument("-o", "--output-dir", help="出力先フォルダ (既定: <動画名>_assist/)")
+    p.add_argument("--target", action="append", dest="targets",
+                   choices=["resolve", "fcp", "premiere", "all"],
+                   help="対象の編集ソフト (複数指定可, 既定: resolve)。"
+                        "fcp=Final Cut Pro, premiere=Premiere Pro, all=全部")
 
     p.add_argument("--no-silence", action="store_true", help="無音カットを行わない")
     p.add_argument("--subtitles", action="store_true", help="字幕 (SRT) を生成する")
@@ -63,6 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.cut_fillers:
         args.fillers = True
 
+    targets = set(args.targets or ["resolve"])
+    if "all" in targets:
+        targets = {"resolve", "fcp", "premiere"}
+
     options = AnalyzeOptions(
         do_silence=not args.no_silence,
         do_subtitles=args.subtitles,
@@ -81,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         scene_threshold=args.scene_threshold,
         filler_dict_path=args.filler_dict,
         max_chars_per_line=args.max_chars,
+        targets=targets,
         output_dir=args.output_dir,
     )
     try:

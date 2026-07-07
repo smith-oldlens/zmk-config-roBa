@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resolve-assist"
-version = "0.1.0"
-description = "DaVinci Resolve 編集補助ツール: 無音カット・フィラー検出・シーン検出・字幕生成"
+version = "0.2.0"
+description = "動画編集補助ツール (Resolve/FCP/Premiere): 無音カット・フィラー検出・シーン検出・字幕生成"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

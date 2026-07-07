@@ -23,8 +23,8 @@ class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         root.title("Resolve Assist — カット & 字幕補助")
-        root.geometry("760x640")
-        root.minsize(640, 560)
+        root.geometry("760x700")
+        root.minsize(640, 600)
 
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
@@ -33,6 +33,9 @@ class App:
         self.do_fillers = tk.BooleanVar(value=True)
         self.cut_fillers = tk.BooleanVar(value=False)
         self.do_scenes = tk.BooleanVar(value=False)
+        self.target_resolve = tk.BooleanVar(value=True)
+        self.target_fcp = tk.BooleanVar(value=False)
+        self.target_premiere = tk.BooleanVar(value=False)
         self.silence_db = tk.DoubleVar(value=-35.0)
         self.min_silence = tk.DoubleVar(value=0.35)
         self.pad_before = tk.DoubleVar(value=0.10)
@@ -91,6 +94,19 @@ class App:
         ttk.Checkbutton(feat, text="シーン検出 (マーカー)", variable=self.do_scenes).grid(
             row=2, column=0, sticky="w", padx=8, pady=2
         )
+
+        # 出力先の編集ソフト
+        target = ttk.LabelFrame(frame, text="対象の編集ソフト")
+        target.pack(fill="x", **pad)
+        ttk.Checkbutton(
+            target, text="DaVinci Resolve", variable=self.target_resolve
+        ).grid(row=0, column=0, sticky="w", padx=8, pady=2)
+        ttk.Checkbutton(
+            target, text="Final Cut Pro (FCPXML)", variable=self.target_fcp
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=2)
+        ttk.Checkbutton(
+            target, text="Premiere Pro (XML)", variable=self.target_premiere
+        ).grid(row=0, column=2, sticky="w", padx=8, pady=2)
 
         # パラメータ
         params = ttk.LabelFrame(frame, text="パラメータ")
@@ -187,6 +203,19 @@ class App:
             messagebox.showerror("Resolve Assist", f"ファイルが見つかりません:\n{video}")
             return
 
+        targets = set()
+        if self.target_resolve.get():
+            targets.add("resolve")
+        if self.target_fcp.get():
+            targets.add("fcp")
+        if self.target_premiere.get():
+            targets.add("premiere")
+        if not targets:
+            messagebox.showwarning(
+                "Resolve Assist", "対象の編集ソフトを1つ以上選んでください。"
+            )
+            return
+
         options = AnalyzeOptions(
             do_silence=self.do_silence.get(),
             do_subtitles=self.do_subtitles.get(),
@@ -200,6 +229,7 @@ class App:
                 pad_after=self.pad_after.get(),
             ),
             whisper_model=self.whisper_model.get(),
+            targets=targets,
             output_dir=self.output_dir.get().strip() or None,
         )
 

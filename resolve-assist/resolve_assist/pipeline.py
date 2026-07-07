@@ -17,7 +17,9 @@ from .analysis.fillers import (
 )
 from .export import cutlist as cutlist_mod
 from .export import edl as edl_mod
+from .export import fcpxml as fcpxml_mod
 from .export import srt as srt_mod
+from .export import xmeml as xmeml_mod
 from .segments import subtract_segments
 from .types import Marker, MediaInfo, Segment, TranscriptSegment
 
@@ -41,6 +43,9 @@ class AnalyzeOptions:
     filler_dict_path: str | None = None
     max_chars_per_line: int = 26
 
+    # 対象の編集ソフト: "resolve" / "fcp" (Final Cut Pro) / "premiere" (Premiere Pro)
+    targets: set[str] = field(default_factory=lambda: {"resolve"})
+
     # 出力先。None なら <動画のあるフォルダ>/<動画名>_assist/
     output_dir: str | None = None
 
@@ -55,6 +60,8 @@ class AnalyzeResult:
     scene_cuts: list[float] = field(default_factory=list)
     cuts_json: Path | None = None
     edl_path: Path | None = None
+    fcpxml_path: Path | None = None
+    premiere_xml_path: Path | None = None
     srt_path: Path | None = None
     transcript_txt: Path | None = None
     filler_report: Path | None = None
@@ -182,7 +189,8 @@ def analyze(
         )
         emit(f"字幕を出力: {result.srt_path}")
 
-    # --- カットリスト・EDL 出力 ---
+    # --- カットリスト・タイムライン出力 (対象ソフトごと) ---
+    targets = opts.targets or {"resolve"}
     cuts = cutlist_mod.build_cutlist(
         info,
         result.segments,
@@ -198,9 +206,36 @@ def analyze(
         title=cuts["timeline_name"],
         clip_name=video_path.name,
     )
-    pointer = cutlist_mod.write_latest_pointer(result.cuts_json, result.srt_path)
     emit(f"カットリストを出力: {result.cuts_json}")
-    emit(f"EDL (保険用) を出力: {result.edl_path}")
-    emit(f"Resolve 用ポインタを更新: {pointer}")
-    emit("完了! Resolve で Workspace > Scripts > ResolveAssist_ApplyCuts を実行してください。")
+    emit(f"EDL (汎用) を出力: {result.edl_path}")
+
+    if "resolve" in targets:
+        pointer = cutlist_mod.write_latest_pointer(result.cuts_json, result.srt_path)
+        emit(f"Resolve 用ポインタを更新: {pointer}")
+    if "fcp" in targets:
+        result.fcpxml_path = fcpxml_mod.write_fcpxml(
+            info,
+            result.segments,
+            out_dir / "timeline.fcpxml",
+            markers=markers,
+            project_name=cuts["timeline_name"],
+        )
+        emit(f"Final Cut Pro 用 FCPXML を出力: {result.fcpxml_path}")
+    if "premiere" in targets:
+        result.premiere_xml_path = xmeml_mod.write_xmeml(
+            info,
+            result.segments,
+            out_dir / "timeline_premiere.xml",
+            markers=markers,
+            sequence_name=cuts["timeline_name"],
+        )
+        emit(f"Premiere Pro 用 XML を出力: {result.premiere_xml_path}")
+
+    emit("完了!")
+    if "resolve" in targets:
+        emit("  Resolve: Workspace > Scripts > ResolveAssist_ApplyCuts を実行")
+    if "fcp" in targets:
+        emit("  Final Cut Pro: File > Import > XML で timeline.fcpxml を読み込み")
+    if "premiere" in targets:
+        emit("  Premiere Pro: File > Import で timeline_premiere.xml を読み込み")
     return result
