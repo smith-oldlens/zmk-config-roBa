@@ -248,8 +248,17 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
 "use strict";
 /* ---------- 初期データ ---------- */
 const PRESET = {
-  cats: ["基本","風景・自然","スナップ・街","フィルム・エモ","カフェ・暮らし","ポートレート"],
+  cats: ["基本","オールドレンズ","風景・自然","スナップ・街","フィルム・エモ","カフェ・暮らし","ポートレート"],
   tags: [
+    // オールドレンズ
+    ["オールドレンズ","big","オールドレンズ"],["oldlens","big","オールドレンズ"],["vintagelens","big","オールドレンズ"],
+    ["オールドレンズ倶楽部","mid","オールドレンズ"],["オールドレンズに恋をした","mid","オールドレンズ"],
+    ["オールドレンズの世界","mid","オールドレンズ"],["オールドレンズ遊び","mid","オールドレンズ"],
+    ["vintagelenses","mid","オールドレンズ"],["manualfocuslens","mid","オールドレンズ"],
+    ["オールドレンズ散歩","niche","オールドレンズ"],["オールドレンズ写真","niche","オールドレンズ"],
+    ["レンズ沼","niche","オールドレンズ"],["マニュアルレンズ","niche","オールドレンズ"],
+    ["supertakumar","niche","オールドレンズ"],["helios44","niche","オールドレンズ"],
+    ["industar","niche","オールドレンズ"],["jupiter8","niche","オールドレンズ"],
     // 基本(コミュニティ系)
     ["写真好きな人と繋がりたい","big","基本"],["ファインダー越しの私の世界","big","基本"],
     ["カメラ好きな人と繋がりたい","big","基本"],["photography","big","基本"],["japan_of_insta","big","基本"],
@@ -295,7 +304,7 @@ function freshState(){
     tags: PRESET.tags.map(([name,size,cat],i)=>({id:i+1, name, size, cat, used:0})),
     cats: PRESET.cats.slice(),
     history: [],
-    settings: {count:12, sep:"space", activeCats:["基本"], nextId: PRESET.tags.length+1},
+    settings: {count:12, sep:"space", activeCats:["基本","オールドレンズ"], nextId: PRESET.tags.length+1},
     current: null
   };
 }
