@@ -6,140 +6,240 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 :root{
-  --bg:#F7F8F9; --surface:#FFFFFF; --surface2:#EFF2F4;
-  --ink:#16202B; --muted:#5B6875; --line:#E2E6EA;
-  --accent:#17557F; --accent-ink:#FFFFFF; --accent-soft:#E3EEF6;
-  --big:#B06A1E; --mid:#17557F; --niche:#3E8E6C;
-  --danger:#A8352F; --shadow:0 1px 2px rgba(22,32,43,.06),0 4px 16px rgba(22,32,43,.05);
+  --bg:#F4F3EF; --surface:#FCFCFA; --surface2:#ECEDE6;
+  --ink:#20261F; --muted:#6C7465; --line:#DFE1D6; --line2:#D2D5C7;
+  --accent:#41634C; --accent-ink:#F7FAF5; --accent-soft:#E3ECE3; --accent-deep:#33513D;
+  --big:#A8761F; --mid:#4A6E86; --niche:#4E8A63;
+  --big-soft:rgba(168,118,31,.10); --mid-soft:rgba(74,110,134,.10); --niche-soft:rgba(78,138,99,.12);
+  --danger:#A8443A;
+  --shadow:0 1px 2px rgba(32,38,31,.05),0 6px 20px rgba(32,38,31,.05);
+  --bokeh1:rgba(65,99,76,.14); --bokeh2:rgba(168,118,31,.10);
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --bg:#101418; --surface:#171C22; --surface2:#1F262E;
-    --ink:#E8ECF0; --muted:#93A0AC; --line:#2A323B;
-    --accent:#7FB0DC; --accent-ink:#0D1B26; --accent-soft:#1C2C3A;
-    --big:#D79A50; --mid:#7FB0DC; --niche:#6FBF9A;
-    --danger:#E07B76; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3);
+    --bg:#111511; --surface:#181E18; --surface2:#212823;
+    --ink:#E7EAE2; --muted:#96A091; --line:#2A322A; --line2:#37413A;
+    --accent:#A5C4AC; --accent-ink:#0F1811; --accent-soft:#20302A; --accent-deep:#BBD6C1;
+    --big:#D9A45C; --mid:#8FB4CC; --niche:#8CC4A0;
+    --big-soft:rgba(217,164,92,.12); --mid-soft:rgba(143,180,204,.12); --niche-soft:rgba(140,196,160,.13);
+    --danger:#DE8078;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.35);
+    --bokeh1:rgba(165,196,172,.10); --bokeh2:rgba(217,164,92,.07);
   }
 }
 :root[data-theme="light"]{
-  --bg:#F7F8F9; --surface:#FFFFFF; --surface2:#EFF2F4;
-  --ink:#16202B; --muted:#5B6875; --line:#E2E6EA;
-  --accent:#17557F; --accent-ink:#FFFFFF; --accent-soft:#E3EEF6;
-  --big:#B06A1E; --mid:#17557F; --niche:#3E8E6C;
-  --danger:#A8352F; --shadow:0 1px 2px rgba(22,32,43,.06),0 4px 16px rgba(22,32,43,.05);
+  --bg:#F4F3EF; --surface:#FCFCFA; --surface2:#ECEDE6;
+  --ink:#20261F; --muted:#6C7465; --line:#DFE1D6; --line2:#D2D5C7;
+  --accent:#41634C; --accent-ink:#F7FAF5; --accent-soft:#E3ECE3; --accent-deep:#33513D;
+  --big:#A8761F; --mid:#4A6E86; --niche:#4E8A63;
+  --big-soft:rgba(168,118,31,.10); --mid-soft:rgba(74,110,134,.10); --niche-soft:rgba(78,138,99,.12);
+  --danger:#A8443A;
+  --shadow:0 1px 2px rgba(32,38,31,.05),0 6px 20px rgba(32,38,31,.05);
+  --bokeh1:rgba(65,99,76,.14); --bokeh2:rgba(168,118,31,.10);
 }
 :root[data-theme="dark"]{
-  --bg:#101418; --surface:#171C22; --surface2:#1F262E;
-  --ink:#E8ECF0; --muted:#93A0AC; --line:#2A323B;
-  --accent:#7FB0DC; --accent-ink:#0D1B26; --accent-soft:#1C2C3A;
-  --big:#D79A50; --mid:#7FB0DC; --niche:#6FBF9A;
-  --danger:#E07B76; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3);
+  --bg:#111511; --surface:#181E18; --surface2:#212823;
+  --ink:#E7EAE2; --muted:#96A091; --line:#2A322A; --line2:#37413A;
+  --accent:#A5C4AC; --accent-ink:#0F1811; --accent-soft:#20302A; --accent-deep:#BBD6C1;
+  --big:#D9A45C; --mid:#8FB4CC; --niche:#8CC4A0;
+  --big-soft:rgba(217,164,92,.12); --mid-soft:rgba(143,180,204,.12); --niche-soft:rgba(140,196,160,.13);
+  --danger:#DE8078;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.35);
+  --bokeh1:rgba(165,196,172,.10); --bokeh2:rgba(217,164,92,.07);
 }
 *{box-sizing:border-box}
 body{
   margin:0; background:var(--bg); color:var(--ink);
   font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI","Yu Gothic",sans-serif;
-  font-size:15px; line-height:1.65;
+  font-size:15px; line-height:1.7;
   -webkit-text-size-adjust:100%;
 }
-.wrap{max-width:720px; margin:0 auto; padding:0 16px 96px}
-header.app{padding:22px 0 8px}
-.brand{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
-.brand h1{margin:0; font-size:21px; font-weight:800; letter-spacing:.01em}
-.brand .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:11px; letter-spacing:.18em; color:var(--accent); text-transform:uppercase}
-.brand p{margin:2px 0 0; width:100%; color:var(--muted); font-size:12.5px}
+.serif{font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif}
+.wrap{max-width:720px; margin:0 auto; padding:0 16px 72px}
+
+/* ---------- ヘッダー: 玉ボケの光 ---------- */
+header.app{
+  position:relative; overflow:hidden;
+  margin:14px 0 0; padding:26px 22px 24px;
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  box-shadow:var(--shadow);
+}
+header.app::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(circle 110px at 88% 8%,   var(--bokeh1), transparent 72%),
+    radial-gradient(circle 70px  at 72% 88%,  var(--bokeh2), transparent 72%),
+    radial-gradient(circle 46px  at 97% 62%,  var(--bokeh1), transparent 70%),
+    radial-gradient(circle 30px  at 62% 18%,  var(--bokeh2), transparent 70%),
+    radial-gradient(circle 90px  at 6% 108%,  var(--bokeh1), transparent 74%);
+}
+.brand{position:relative}
+.brand .en{
+  display:block; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:10.5px; letter-spacing:.32em; color:var(--muted); text-transform:uppercase; margin-bottom:6px;
+}
+.brand h1{
+  margin:0; font-size:26px; font-weight:600; letter-spacing:.06em; line-height:1.3;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+  text-wrap:balance;
+}
+.brand h1 b{color:var(--accent-deep); font-weight:600}
+.brand p{margin:8px 0 0; color:var(--muted); font-size:12.5px; max-width:34em}
+
+/* ---------- タブ: セグメントコントロール ---------- */
 nav.tabs{
-  position:sticky; top:0; z-index:20; display:flex; gap:4px;
-  background:var(--bg); padding:10px 0 12px; border-bottom:1px solid var(--line); margin-bottom:18px;
+  position:sticky; top:0; z-index:20;
+  background:var(--bg); padding:12px 0 14px; margin-bottom:4px;
+}
+nav.tabs .seg{
+  display:flex; gap:3px; padding:3px;
+  background:var(--surface2); border:1px solid var(--line); border-radius:11px;
 }
 nav.tabs button{
-  flex:1; border:1px solid var(--line); background:var(--surface); color:var(--muted);
-  padding:9px 4px; border-radius:8px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
+  flex:1; border:none; background:transparent; color:var(--muted);
+  padding:8px 4px; border-radius:8px; font-size:13.5px; font-weight:700;
+  letter-spacing:.02em; cursor:pointer; font-family:inherit;
+  transition:background .15s, color .15s;
 }
-nav.tabs button[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+nav.tabs button[aria-selected="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.12)}
 nav.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
   outline:2px solid var(--accent); outline-offset:2px;
 }
 section.panel{display:none}
 section.panel.active{display:block}
-.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow)}
-.card h2{margin:0 0 4px; font-size:14px; font-weight:800; letter-spacing:.02em}
-.card .hint{margin:0 0 12px; color:var(--muted); font-size:12.5px}
+
+/* ---------- カード ---------- */
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:20px 18px; margin:14px 0; box-shadow:var(--shadow);
+}
+.card h2{
+  margin:0 0 4px; font-size:16px; font-weight:600; letter-spacing:.08em;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+}
+.card .hint{margin:0 0 14px; color:var(--muted); font-size:12.5px}
+
+/* ---------- フォーム ---------- */
 .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-.field{display:flex; flex-direction:column; gap:4px; margin-bottom:12px}
-.field label{font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.04em}
+.field{display:flex; flex-direction:column; gap:5px; margin-bottom:14px}
+.field label, .iolabel{
+  font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.12em;
+}
 input[type=text], select, textarea{
   font-family:inherit; font-size:15px; color:var(--ink);
-  background:var(--surface2); border:1px solid var(--line); border-radius:8px; padding:9px 10px; width:100%;
+  background:var(--bg); border:1px solid var(--line2); border-radius:10px; padding:10px 12px; width:100%;
+  transition:border-color .15s;
 }
-textarea{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:13px; min-height:110px; resize:vertical}
-input[type=range]{width:100%; accent-color:var(--accent)}
+input[type=text]:focus, select:focus, textarea:focus{border-color:var(--accent)}
+textarea{font-size:14px; min-height:110px; resize:vertical; line-height:1.7}
+textarea#resultText, textarea#ioArea{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px}
+select{appearance:none; -webkit-appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%),linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size:5px 5px; background-repeat:no-repeat; padding-right:30px;
+}
+input[type=range]{width:100%; accent-color:var(--accent); margin:4px 0}
+
+/* ---------- ボタン ---------- */
 button.btn{
   font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
-  border:1px solid var(--line); background:var(--surface2); color:var(--ink);
-  padding:9px 14px; border-radius:8px;
+  border:1px solid var(--line2); background:var(--surface); color:var(--ink);
+  padding:10px 14px; border-radius:10px;
+  transition:transform .08s, background .15s, border-color .15s;
 }
-button.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-size:15px; padding:12px 18px; width:100%}
+button.btn:active{transform:scale(.98)}
+button.btn:hover{border-color:var(--accent)}
+button.btn.primary{
+  background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
+  font-size:15px; letter-spacing:.14em; padding:14px 18px; width:100%;
+}
+button.btn.primary:hover{filter:brightness(1.06)}
 button.btn.ghost{background:transparent}
 button.btn.danger{color:var(--danger); border-color:var(--danger); background:transparent}
-button.btn:disabled{opacity:.45; cursor:default}
-.checks{display:flex; flex-wrap:wrap; gap:6px}
+button.btn:disabled{opacity:.4; cursor:default; transform:none}
+@media (prefers-reduced-motion: reduce){ button.btn, nav.tabs button{transition:none} button.btn:active{transform:none} }
+
+/* ---------- チェック(カテゴリ・区切り) ---------- */
+.checks{display:flex; flex-wrap:wrap; gap:7px}
 .checks label{
-  display:inline-flex; align-items:center; gap:6px; cursor:pointer;
-  border:1px solid var(--line); background:var(--surface2); border-radius:999px;
-  padding:6px 12px; font-size:13px; font-weight:600; color:var(--muted);
+  display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+  border:1px solid var(--line2); background:transparent; border-radius:999px;
+  padding:7px 13px; font-size:13px; font-weight:600; color:var(--muted);
+  transition:background .15s, border-color .15s, color .15s;
 }
 .checks label:has(input:checked){background:var(--accent-soft); border-color:var(--accent); color:var(--ink)}
 .checks input{accent-color:var(--accent); margin:0}
-.result-tags{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 12px}
+
+/* ---------- 生成結果 ---------- */
+.result-tags{display:flex; flex-wrap:wrap; gap:7px; margin:12px 0 16px}
 .tagchip{
-  display:inline-flex; align-items:center; gap:6px;
+  display:inline-flex; align-items:center; gap:7px;
   font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px;
-  background:var(--surface2); border:1px solid var(--line); border-radius:6px; padding:4px 9px;
+  border:1px solid var(--line); border-radius:8px; padding:5px 10px;
 }
+.tagchip.big{background:var(--big-soft)} .tagchip.mid{background:var(--mid-soft)} .tagchip.niche{background:var(--niche-soft)}
 .dot{display:inline-block; width:7px; height:7px; border-radius:50%; flex:none}
 .dot.big{background:var(--big)} .dot.mid{background:var(--mid)} .dot.niche{background:var(--niche)}
-.legend{display:flex; gap:14px; font-size:11.5px; color:var(--muted); margin-bottom:6px}
-.legend span{display:inline-flex; align-items:center; gap:5px}
-.stats{font-size:12px; color:var(--muted); margin:0 0 8px}
+.legend{display:flex; flex-wrap:wrap; gap:5px 16px; font-size:11.5px; color:var(--muted); margin-bottom:8px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.stats{font-size:12.5px; color:var(--muted); margin:0 0 6px}
 .stats b{color:var(--ink); font-variant-numeric:tabular-nums}
-.actions{display:flex; gap:8px; margin-top:10px}
+.preview-head{display:flex; align-items:baseline; justify-content:space-between; margin:6px 0 5px}
+.actions{display:flex; gap:8px; margin-top:12px}
 .actions .btn{flex:1}
+
+/* ---------- タグ一覧 ---------- */
 table.tags{width:100%; border-collapse:collapse; font-size:13.5px}
-table.tags td{padding:7px 6px; border-top:1px solid var(--line); vertical-align:middle}
+table.tags td{padding:8px 6px; border-top:1px solid var(--line); vertical-align:middle}
 table.tags td.name{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; word-break:break-all}
 table.tags td.meta{color:var(--muted); font-size:11.5px; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
-table.tags button.x{border:none; background:none; color:var(--danger); font-size:15px; cursor:pointer; padding:2px 6px}
+table.tags button.x{
+  border:none; background:none; color:var(--muted); font-size:15px; cursor:pointer;
+  padding:2px 8px; border-radius:6px; transition:color .15s;
+}
+table.tags button.x:hover{color:var(--danger)}
 .scrollbox{overflow-x:auto}
-.hist{border-top:1px solid var(--line); padding:10px 0}
-.hist:first-of-type{border-top:none}
-.hist .when{font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums}
-.hist .tags{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; margin:4px 0 8px; word-break:break-all; color:var(--ink)}
+
+/* ---------- 履歴 ---------- */
+.hist{border-top:1px solid var(--line); padding:12px 0}
+.hist:first-of-type{border-top:none; padding-top:2px}
+.hist .when{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; letter-spacing:.06em}
+.hist .tags{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; margin:5px 0 9px; word-break:break-all; color:var(--ink); line-height:1.8}
+
+/* ---------- トースト・フッター ---------- */
 #toast{
-  position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(8px);
+  position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(8px);
   background:var(--ink); color:var(--bg); font-size:13.5px; font-weight:700;
-  padding:10px 18px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
-  z-index:50; box-shadow:var(--shadow);
+  padding:11px 20px; border-radius:999px; opacity:0; pointer-events:none;
+  transition:opacity .2s, transform .2s; z-index:50; box-shadow:var(--shadow);
+  max-width:calc(100vw - 48px); text-align:center;
 }
 #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion: reduce){ #toast{transition:none} }
-.note{font-size:12px; color:var(--muted); border-left:3px solid var(--line); padding-left:10px; margin:12px 0 0}
+.note{font-size:12px; color:var(--muted); border-left:2px solid var(--accent); padding-left:12px; margin:14px 0 0; line-height:1.8}
+footer.colophon{
+  margin:34px 0 0; text-align:center; color:var(--muted); font-size:11.5px; letter-spacing:.14em;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+}
+footer.colophon .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:10px; letter-spacing:.28em; text-transform:uppercase; display:block; margin-top:4px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="app">
     <div class="brand">
-      <h1>ハッシュタグローテーター</h1>
       <span class="en">Hashtag Rotator</span>
-      <p>毎回ちがう組み合わせを自動生成 — 同一タグセットの繰り返しを避けて、コピーひとつで投稿へ。</p>
+      <h1>ハッシュタグ<b>ローテーター</b></h1>
+      <p>毎回ちがう組み合わせを自動で編む — 本文とタグをひとつにして、コピーひとつで投稿へ。</p>
     </div>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" aria-selected="true" data-tab="gen">生成</button>
-    <button role="tab" aria-selected="false" data-tab="manage">タグ管理</button>
-    <button role="tab" aria-selected="false" data-tab="sync">履歴・同期</button>
+    <div class="seg">
+      <button role="tab" aria-selected="true" data-tab="gen">生成</button>
+      <button role="tab" aria-selected="false" data-tab="manage">タグ管理</button>
+      <button role="tab" aria-selected="false" data-tab="sync">履歴・同期</button>
+    </div>
   </nav>
 
   <!-- ============ 生成 ============ -->
@@ -158,6 +258,9 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
       </div>
       <p class="stats" id="genStats">まだ生成していません</p>
       <div class="result-tags" id="resultChips"></div>
+      <div class="preview-head">
+        <span class="iolabel">投稿プレビュー(コピーされる内容)</span>
+      </div>
       <textarea id="resultText" readonly placeholder="ここに本文+ハッシュタグの完成形が表示されます" style="min-height:150px"></textarea>
       <div class="actions">
         <button class="btn" id="btnShuffle" disabled>並びシャッフル</button>
@@ -245,6 +348,11 @@ table.tags button.x{border:none; background:none; color:var(--danger); font-size
       </div>
     </div>
   </section>
+
+  <footer class="colophon">
+    現実と幻想の間、その一枚のために
+    <span class="en">for @smith_oldlens</span>
+  </footer>
 </div>
 <div id="toast" role="status"></div>
 
@@ -413,7 +521,7 @@ function renderResult(){
   }
   chips.innerHTML = S.current.map(n=>{
     const t = tagByName(n), size = t ? t.size : "mid";
-    return `<span class="tagchip"><i class="dot ${size}"></i>#${esc(n)}</span>`;
+    return `<span class="tagchip ${size}"><i class="dot ${size}"></i>#${esc(n)}</span>`;
   }).join("");
   $("#resultText").value = fullText();
   $("#btnCopy").disabled = $("#btnShuffle").disabled = false;
