@@ -12,6 +12,21 @@
     automouse-layer = <4>;
     scroll-layers = <5>;
 
+    // SWIPEレイヤー(7)中はボールの左右の動きでブラウザの「進む/戻る」を送信する
+    // (iPhoneのスワイプナビゲーション風の操作)
+    // tick: 大きいほど多くの動きが必要になる(感度調整はここ)
+    swipe {
+        layers = <7>;
+        bindings =
+            <&kp C_AC_FORWARD>,
+            <&kp C_AC_BACK>,
+            <&none>,
+            <&none>;
+        tick = <100>;
+        wait-ms = <500>;
+        tap-ms = <30>;
+    };
+
     // arrows {
     //     layers = <3>;
     //     bindings =
@@ -108,7 +123,7 @@
 
         MOUSE {
             bindings = <
-                &trans  &trans  &trans  &trans  &trans  &kp C_FF  &kp PAGE_UP  &kp PAGE_DOWN  &trans  &trans  &trans  &kp LC(LEFT)  &kp LC(UP_ARROW)  &kp LC(RIGHT)  &trans  &trans  &trans  &kp C_AC_BACK  &mkp MB1  &mkp MB2  &mkp MB2  &mo 5  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans  &kp C_FF  &kp PAGE_UP  &kp PAGE_DOWN  &trans  &trans  &trans  &kp LC(LEFT)  &kp LC(UP_ARROW)  &kp LC(RIGHT)  &trans  &trans  &kp C_AC_FORWARD  &kp C_AC_BACK  &mkp MB1  &mkp MB2  &mo 7  &mo 5  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
             >;
         };
 
@@ -121,6 +136,12 @@
         layer_6 {
             bindings = <
                 &trans  &trans  &trans  &trans  &trans  &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 2  &bt BT_SEL 3  &bt BT_SEL 4  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &kp NUMBER_1  &kp NUMBER_2  &kp NUMBER_3  &trans  &trans  &bootloader  &trans  &trans  &trans  &trans  &bt BT_CLR  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &bt BT_CLR_ALL
+            >;
+        };
+
+        SWIPE {
+            bindings = <
+                &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
             >;
         };
 
