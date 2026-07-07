@@ -7,6 +7,9 @@ on:
       - ".github/workflows/android-adblock.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,8 +32,24 @@ jobs:
         working-directory: android-adblock
         run: gradle --no-daemon :app:assembleDebug
 
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp android-adblock/app/build/outputs/apk/debug/app-debug.apk dist/roba-adblock.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: roba-adblock-debug-apk
-          path: android-adblock/app/build/outputs/apk/debug/app-debug.apk
+          path: dist/roba-adblock.apk
+
+      - name: Publish APK to a Release (one-tap download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: adblock-latest
+          name: roBa AdBlock (最新ビルド)
+          body: |
+            Androidの広告ブロッカーアプリです。下の **Assets** にある
+            `roba-adblock.apk` をタップしてダウンロードし、インストールしてください。
+            (ログイン・解凍は不要です)
+          files: dist/roba-adblock.apk
