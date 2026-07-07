@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ハッシュタグローテーター</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{
+  --bg:#F7F8F9; --surface:#FFFFFF; --surface2:#EFF2F4;
+  --ink:#16202B; --muted:#5B6875; --line:#E2E6EA;
+  --accent:#17557F; --accent-ink:#FFFFFF; --accent-soft:#E3EEF6;
+  --big:#B06A1E; --mid:#17557F; --niche:#3E8E6C;
+  --danger:#A8352F; --shadow:0 1px 2px rgba(22,32,43,.06),0 4px 16px rgba(22,32,43,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#101418; --surface:#171C22; --surface2:#1F262E;
+    --ink:#E8ECF0; --muted:#93A0AC; --line:#2A323B;
+    --accent:#7FB0DC; --accent-ink:#0D1B26; --accent-soft:#1C2C3A;
+    --big:#D79A50; --mid:#7FB0DC; --niche:#6FBF9A;
+    --danger:#E07B76; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="light"]{
+  --bg:#F7F8F9; --surface:#FFFFFF; --surface2:#EFF2F4;
+  --ink:#16202B; --muted:#5B6875; --line:#E2E6EA;
+  --accent:#17557F; --accent-ink:#FFFFFF; --accent-soft:#E3EEF6;
+  --big:#B06A1E; --mid:#17557F; --niche:#3E8E6C;
+  --danger:#A8352F; --shadow:0 1px 2px rgba(22,32,43,.06),0 4px 16px rgba(22,32,43,.05);
+}
+:root[data-theme="dark"]{
+  --bg:#101418; --surface:#171C22; --surface2:#1F262E;
+  --ink:#E8ECF0; --muted:#93A0AC; --line:#2A323B;
+  --accent:#7FB0DC; --accent-ink:#0D1B26; --accent-soft:#1C2C3A;
+  --big:#D79A50; --mid:#7FB0DC; --niche:#6FBF9A;
+  --danger:#E07B76; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI","Yu Gothic",sans-serif;
+  font-size:15px; line-height:1.65;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:720px; margin:0 auto; padding:0 16px 96px}
+header.app{padding:22px 0 8px}
+.brand{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.brand h1{margin:0; font-size:21px; font-weight:800; letter-spacing:.01em}
+.brand .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:11px; letter-spacing:.18em; color:var(--accent); text-transform:uppercase}
+.brand p{margin:2px 0 0; width:100%; color:var(--muted); font-size:12.5px}
+nav.tabs{
+  position:sticky; top:0; z-index:20; display:flex; gap:4px;
+  background:var(--bg); padding:10px 0 12px; border-bottom:1px solid var(--line); margin-bottom:18px;
+}
+nav.tabs button{
+  flex:1; border:1px solid var(--line); background:var(--surface); color:var(--muted);
+  padding:9px 4px; border-radius:8px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
+}
+nav.tabs button[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+nav.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+section.panel{display:none}
+section.panel.active{display:block}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow)}
+.card h2{margin:0 0 4px; font-size:14px; font-weight:800; letter-spacing:.02em}
+.card .hint{margin:0 0 12px; color:var(--muted); font-size:12.5px}
+.row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.field{display:flex; flex-direction:column; gap:4px; margin-bottom:12px}
+.field label{font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.04em}
+input[type=text], select, textarea{
+  font-family:inherit; font-size:15px; color:var(--ink);
+  background:var(--surface2); border:1px solid var(--line); border-radius:8px; padding:9px 10px; width:100%;
+}
+textarea{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:13px; min-height:110px; resize:vertical}
+input[type=range]{width:100%; accent-color:var(--accent)}
+button.btn{
+  font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+  border:1px solid var(--line); background:var(--surface2); color:var(--ink);
+  padding:9px 14px; border-radius:8px;
+}
+button.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-size:15px; padding:12px 18px; width:100%}
+button.btn.ghost{background:transparent}
+button.btn.danger{color:var(--danger); border-color:var(--danger); background:transparent}
+button.btn:disabled{opacity:.45; cursor:default}
+.checks{display:flex; flex-wrap:wrap; gap:6px}
+.checks label{
+  display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+  border:1px solid var(--line); background:var(--surface2); border-radius:999px;
+  padding:6px 12px; font-size:13px; font-weight:600; color:var(--muted);
+}
+.checks label:has(input:checked){background:var(--accent-soft); border-color:var(--accent); color:var(--ink)}
+.checks input{accent-color:var(--accent); margin:0}
+.result-tags{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 12px}
+.tagchip{
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px;
+  background:var(--surface2); border:1px solid var(--line); border-radius:6px; padding:4px 9px;
+}
+.dot{display:inline-block; width:7px; height:7px; border-radius:50%; flex:none}
+.dot.big{background:var(--big)} .dot.mid{background:var(--mid)} .dot.niche{background:var(--niche)}
+.legend{display:flex; gap:14px; font-size:11.5px; color:var(--muted); margin-bottom:6px}
+.legend span{display:inline-flex; align-items:center; gap:5px}
+.stats{font-size:12px; color:var(--muted); margin:0 0 8px}
+.stats b{color:var(--ink); font-variant-numeric:tabular-nums}
+.actions{display:flex; gap:8px; margin-top:10px}
+.actions .btn{flex:1}
+table.tags{width:100%; border-collapse:collapse; font-size:13.5px}
+table.tags td{padding:7px 6px; border-top:1px solid var(--line); vertical-align:middle}
+table.tags td.name{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; word-break:break-all}
+table.tags td.meta{color:var(--muted); font-size:11.5px; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
+table.tags button.x{border:none; background:none; color:var(--danger); font-size:15px; cursor:pointer; padding:2px 6px}
+.scrollbox{overflow-x:auto}
+.hist{border-top:1px solid var(--line); padding:10px 0}
+.hist:first-of-type{border-top:none}
+.hist .when{font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.hist .tags{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; margin:4px 0 8px; word-break:break-all; color:var(--ink)}
+#toast{
+  position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(8px);
+  background:var(--ink); color:var(--bg); font-size:13.5px; font-weight:700;
+  padding:10px 18px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
+  z-index:50; box-shadow:var(--shadow);
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion: reduce){ #toast{transition:none} }
+.note{font-size:12px; color:var(--muted); border-left:3px solid var(--line); padding-left:10px; margin:12px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <div class="brand">
+      <h1>ハッシュタグローテーター</h1>
+      <span class="en">Hashtag Rotator</span>
+      <p>毎回ちがう組み合わせを自動生成 — 同一タグセットの繰り返しを避けて、コピーひとつで投稿へ。</p>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="gen">生成</button>
+    <button role="tab" aria-selected="false" data-tab="manage">タグ管理</button>
+    <button role="tab" aria-selected="false" data-tab="sync">履歴・同期</button>
+  </nav>
+
+  <!-- ============ 生成 ============ -->
+  <section class="panel active" id="panel-gen">
+    <div class="card">
+      <h2>今回のタグセット</h2>
+      <p class="hint">「生成」を押すたびに、前回と重なりすぎない組み合わせを作ります。</p>
+      <div class="legend">
+        <span><i class="dot big"></i>ビッグ(投稿数 多)</span>
+        <span><i class="dot mid"></i>ミドル</span>
+        <span><i class="dot niche"></i>ニッチ(投稿数 少)</span>
+      </div>
+      <p class="stats" id="genStats">まだ生成していません</p>
+      <div class="result-tags" id="resultChips"></div>
+      <textarea id="resultText" readonly placeholder="ここに生成結果が表示されます"></textarea>
+      <div class="actions">
+        <button class="btn" id="btnShuffle" disabled>並びシャッフル</button>
+        <button class="btn" id="btnCopy" disabled>コピー</button>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="btnGenerate">タグセットを生成</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>生成の設定</h2>
+      <div class="field">
+        <label for="cntRange">タグ数: <span id="cntLabel">12</span> 個(推奨 8〜15)</label>
+        <input type="range" id="cntRange" min="5" max="30" value="12">
+      </div>
+      <div class="field">
+        <label>使うカテゴリ</label>
+        <div class="checks" id="catChecks"></div>
+      </div>
+      <div class="field">
+        <label>コピー時の区切り</label>
+        <div class="checks" id="sepChecks">
+          <label><input type="radio" name="sep" value="space" checked>スペース</label>
+          <label><input type="radio" name="sep" value="newline">改行</label>
+        </div>
+      </div>
+      <p class="note">目安の配合 — ビッグ約2割・ミドル約5割・ニッチ約3割。直前のセットと同じタグは半分以上入れ替わるように選びます。</p>
+    </div>
+  </section>
+
+  <!-- ============ タグ管理 ============ -->
+  <section class="panel" id="panel-manage">
+    <div class="card">
+      <h2>タグを追加</h2>
+      <div class="field"><label for="addName">タグ(#は省略可・スペース区切りで複数可)</label>
+        <input type="text" id="addName" placeholder="例: 風景写真 landscapephotography"></div>
+      <div class="row">
+        <select id="addSize" style="flex:1">
+          <option value="big">ビッグ(数十万件〜)</option>
+          <option value="mid" selected>ミドル(数万件)</option>
+          <option value="niche">ニッチ(〜数千件)</option>
+        </select>
+        <select id="addCat" style="flex:1"></select>
+        <button class="btn" id="btnAdd">追加</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="newCat" placeholder="新しいカテゴリ名" style="flex:1">
+        <button class="btn ghost" id="btnAddCat">カテゴリ追加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>タグ一覧 <span id="tagCount" style="color:var(--muted);font-weight:600;font-size:12px"></span></h2>
+      <div class="row" style="margin-bottom:10px">
+        <input type="text" id="q" placeholder="検索…" style="flex:2">
+        <select id="sortBy" style="flex:1">
+          <option value="name">名前順</option>
+          <option value="size">サイズ順</option>
+          <option value="used">使用回数順</option>
+        </select>
+      </div>
+      <div class="checks" id="filterCats" style="margin-bottom:8px"></div>
+      <div class="scrollbox"><table class="tags"><tbody id="tagRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ 履歴・同期 ============ -->
+  <section class="panel" id="panel-sync">
+    <div class="card">
+      <h2>生成履歴</h2>
+      <p class="hint">直近20件。同じセットの使い回しチェックにも使えます。</p>
+      <div id="histList"><p class="hint">まだ履歴はありません。</p></div>
+    </div>
+    <div class="card">
+      <h2>スマホ ⇄ PC のデータ共有</h2>
+      <p class="hint">データはこの端末のブラウザに保存されます。別の端末へは、書き出したテキストを貼り付けて取り込んでください(LINEやメモの共有でOK)。</p>
+      <div class="actions">
+        <button class="btn" id="btnExport">書き出し(コピー)</button>
+        <button class="btn" id="btnImport">貼り付けて取り込み</button>
+      </div>
+      <textarea id="ioArea" placeholder="取り込み: ここに書き出したテキストを貼り付けて「取り込み」を押す"></textarea>
+      <div class="actions">
+        <button class="btn danger" id="btnReset">初期データに戻す</button>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ---------- 初期データ ---------- */
+const PRESET = {
+  cats: ["基本","風景・自然","スナップ・街","フィルム・エモ","カフェ・暮らし","ポートレート"],
+  tags: [
+    // 基本(コミュニティ系)
+    ["写真好きな人と繋がりたい","big","基本"],["ファインダー越しの私の世界","big","基本"],
+    ["カメラ好きな人と繋がりたい","big","基本"],["photography","big","基本"],["japan_of_insta","big","基本"],
+    ["東京カメラ部","mid","基本"],["キリトリセカイ","mid","基本"],["その瞬間に物語を","mid","基本"],
+    ["写真撮ってる人と繋がりたい","mid","基本"],["カメラのある生活","mid","基本"],
+    ["レンズ越しの私の世界","mid","基本"],["お写んぽ","mid","基本"],
+    ["何気ない日常","niche","基本"],["日常に魔法をかけて","niche","基本"],
+    ["写真散歩","niche","基本"],["私の写真もっと広まれ","niche","基本"],
+    // 風景・自然
+    ["風景写真","big","風景・自然"],["絶景","big","風景・自然"],
+    ["landscapephotography","big","風景・自然"],["naturephotography","big","風景・自然"],
+    ["日本の風景","mid","風景・自然"],["空が好きな人と繋がりたい","mid","風景・自然"],
+    ["夕景","mid","風景・自然"],["山が好きな人と繋がりたい","mid","風景・自然"],
+    ["朝焼け","niche","風景・自然"],["里山風景","niche","風景・自然"],
+    ["風景写真をこよなく愛す会","niche","風景・自然"],
+    // スナップ・街
+    ["streetphotography","big","スナップ・街"],["ストリートスナップ","big","スナップ・街"],
+    ["スナップ写真","big","スナップ・街"],
+    ["街歩き","mid","スナップ・街"],["路地裏","mid","スナップ・街"],
+    ["streetsnap","mid","スナップ・街"],["日常スナップ","mid","スナップ・街"],
+    ["路地裏散歩","niche","スナップ・街"],["生活感のある写真","niche","スナップ・街"],["街の記憶","niche","スナップ・街"],
+    // フィルム・エモ
+    ["フィルム写真","big","フィルム・エモ"],["filmphotography","big","フィルム・エモ"],["エモい","big","フィルム・エモ"],
+    ["フィルムカメラ","mid","フィルム・エモ"],["フィルムに恋してる","mid","フィルム・エモ"],
+    ["35mmfilm","mid","フィルム・エモ"],["フィルム写真普及委員会","mid","フィルム・エモ"],["エモい写真","mid","フィルム・エモ"],
+    ["フィルムの灯を絶やさない","niche","フィルム・エモ"],["写ルンです","niche","フィルム・エモ"],
+    // カフェ・暮らし
+    ["カフェ巡り","big","カフェ・暮らし"],["カフェ好きな人と繋がりたい","big","カフェ・暮らし"],["丁寧な暮らし","big","カフェ・暮らし"],
+    ["喫茶店巡り","mid","カフェ・暮らし"],["暮らしを楽しむ","mid","カフェ・暮らし"],["テーブルフォト","mid","カフェ・暮らし"],
+    ["純喫茶巡り","niche","カフェ・暮らし"],["うつわ好き","niche","カフェ・暮らし"],
+    // ポートレート
+    ["ポートレート","big","ポートレート"],["portrait","big","ポートレート"],["被写体","big","ポートレート"],
+    ["ポートレート撮影","mid","ポートレート"],["portraitphotography","mid","ポートレート"],["その笑顔を残したい","mid","ポートレート"],
+    ["ポートレートしま専科","niche","ポートレート"],["スナップポートレート","niche","ポートレート"],
+  ]
+};
+const KEY = "hashrotate.v1";
+const SIZE_LABEL = {big:"ビッグ", mid:"ミドル", niche:"ニッチ"};
+const SIZE_ORDER = {big:0, mid:1, niche:2};
+
+function freshState(){
+  return {
+    tags: PRESET.tags.map(([name,size,cat],i)=>({id:i+1, name, size, cat, used:0})),
+    cats: PRESET.cats.slice(),
+    history: [],
+    settings: {count:12, sep:"space", activeCats:["基本"], nextId: PRESET.tags.length+1},
+    current: null
+  };
+}
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) || freshState(); }
+catch(e){ S = freshState(); }
+if(!S.tags || !S.cats) S = freshState();
+
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- ユーティリティ ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+function esc(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand("copy"); }catch(_){}
+    ta.remove(); return ok;
+  }
+}
+function fmt(tags){ return tags.map(t=>"#"+t).join(S.settings.sep==="newline" ? "\n" : " "); }
+
+/* ---------- 生成ロジック ---------- */
+function weightedPick(pool, n, avoid){
+  // avoid: 直前セットのタグ名Set。使用回数が少ないほど・直前に使っていないほど選ばれやすい
+  const picked = [];
+  const cand = pool.slice();
+  while(picked.length < n && cand.length){
+    let total = 0;
+    const ws = cand.map(t=>{
+      let w = 1/(1 + t.used*0.5);
+      if(avoid.has(t.name)) w *= 0.25;
+      total += w; return w;
+    });
+    let r = Math.random()*total, idx = 0;
+    for(let i=0;i<ws.length;i++){ r -= ws[i]; if(r<=0){ idx=i; break; } }
+    picked.push(cand[idx]); cand.splice(idx,1);
+  }
+  return picked;
+}
+function generate(){
+  const active = S.settings.activeCats.length ? S.settings.activeCats : S.cats;
+  const pool = S.tags.filter(t=>active.includes(t.cat));
+  if(pool.length < 3){ toast("タグが足りません。カテゴリを選ぶかタグを追加してください"); return; }
+  const N = Math.min(S.settings.count, pool.length);
+  const prev = new Set([...(S.history[0] ? S.history[0].tags : []), ...(S.current || [])]);
+  const bySize = {big:[], mid:[], niche:[]};
+  pool.forEach(t=>bySize[t.size].push(t));
+  // 配合: ビッグ25% / ニッチ30% / 残りミドル
+  let nBig = Math.min(Math.round(N*0.25), bySize.big.length);
+  let nNiche = Math.min(Math.round(N*0.30), bySize.niche.length);
+  let nMid = Math.min(N - nBig - nNiche, bySize.mid.length);
+  let picked = [
+    ...weightedPick(bySize.big, nBig, prev),
+    ...weightedPick(bySize.mid, nMid, prev),
+    ...weightedPick(bySize.niche, nNiche, prev),
+  ];
+  if(picked.length < N){ // 端数はサイズ問わず補充
+    const names = new Set(picked.map(t=>t.name));
+    picked = picked.concat(weightedPick(pool.filter(t=>!names.has(t.name)), N-picked.length, prev));
+  }
+  shuffle(picked);
+  S.current = picked.map(t=>t.name);
+  save();
+  renderResult();
+  const ov = overlap(S.current, S.history[0] ? S.history[0].tags : []);
+  $("#genStats").innerHTML = `<b>${S.current.length}</b> 個 — 前回との重複 <b>${ov}%</b>`;
+}
+function overlap(a, b){
+  if(!b || !b.length) return 0;
+  const B = new Set(b);
+  return Math.round(a.filter(x=>B.has(x)).length / a.length * 100);
+}
+
+/* ---------- 描画 ---------- */
+function tagByName(name){ return S.tags.find(t=>t.name===name); }
+function renderResult(){
+  const chips = $("#resultChips");
+  if(!S.current || !S.current.length){
+    chips.innerHTML=""; $("#resultText").value="";
+    $("#btnCopy").disabled = $("#btnShuffle").disabled = true; return;
+  }
+  chips.innerHTML = S.current.map(n=>{
+    const t = tagByName(n), size = t ? t.size : "mid";
+    return `<span class="tagchip"><i class="dot ${size}"></i>#${esc(n)}</span>`;
+  }).join("");
+  $("#resultText").value = fmt(S.current);
+  $("#btnCopy").disabled = $("#btnShuffle").disabled = false;
+}
+function renderCatChecks(){
+  $("#catChecks").innerHTML = S.cats.map(c=>
+    `<label><input type="checkbox" value="${esc(c)}" ${S.settings.activeCats.includes(c)?"checked":""}>${esc(c)}</label>`
+  ).join("");
+  $("#catChecks").querySelectorAll("input").forEach(el=>el.addEventListener("change", ()=>{
+    S.settings.activeCats = [...$("#catChecks").querySelectorAll("input:checked")].map(i=>i.value);
+    save();
+  }));
+  $("#addCat").innerHTML = S.cats.map(c=>`<option>${esc(c)}</option>`).join("");
+  $("#filterCats").innerHTML = `<label><input type="radio" name="fc" value="" checked>すべて</label>` +
+    S.cats.map(c=>`<label><input type="radio" name="fc" value="${esc(c)}">${esc(c)}</label>`).join("");
+  $("#filterCats").querySelectorAll("input").forEach(el=>el.addEventListener("change", renderTagList));
+}
+function renderTagList(){
+  const q = $("#q").value.trim().toLowerCase();
+  const fc = ($("#filterCats input:checked")||{}).value || "";
+  const sort = $("#sortBy").value;
+  let list = S.tags.filter(t=>(!fc || t.cat===fc) && (!q || t.name.toLowerCase().includes(q)));
+  if(sort==="name") list.sort((a,b)=>a.name.localeCompare(b.name,"ja"));
+  else if(sort==="size") list.sort((a,b)=>SIZE_ORDER[a.size]-SIZE_ORDER[b.size] || a.name.localeCompare(b.name,"ja"));
+  else list.sort((a,b)=>b.used-a.used);
+  $("#tagCount").textContent = `(${list.length} / ${S.tags.length})`;
+  $("#tagRows").innerHTML = list.map(t=>`<tr>
+    <td style="width:14px"><i class="dot ${t.size}" style="display:inline-block"></i></td>
+    <td class="name">#${esc(t.name)}</td>
+    <td class="meta">${esc(t.cat)} · ${SIZE_LABEL[t.size]} · ${t.used}回</td>
+    <td style="width:28px"><button class="x" data-id="${t.id}" aria-label="削除">×</button></td>
+  </tr>`).join("");
+  $("#tagRows").querySelectorAll("button.x").forEach(b=>b.addEventListener("click", ()=>{
+    S.tags = S.tags.filter(t=>t.id!==Number(b.dataset.id));
+    save(); renderTagList();
+  }));
+}
+function renderHistory(){
+  const el = $("#histList");
+  if(!S.history.length){ el.innerHTML = `<p class="hint">まだ履歴はありません。</p>`; return; }
+  el.innerHTML = S.history.map((h,i)=>`<div class="hist">
+    <div class="when">${esc(h.when)}${i<S.history.length-1?` — 次と重複 ${overlap(h.tags,S.history[i+1].tags)}%`:""}</div>
+    <div class="tags">${h.tags.map(t=>"#"+esc(t)).join(" ")}</div>
+    <button class="btn ghost" data-i="${i}" style="font-size:12.5px;padding:5px 12px">これをコピー</button>
+  </div>`).join("");
+  el.querySelectorAll("button").forEach(b=>b.addEventListener("click", async ()=>{
+    const h = S.history[Number(b.dataset.i)];
+    if(await copyText(fmt(h.tags))) toast("コピーしました");
+  }));
+}
+
+/* ---------- イベント ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click", ()=>{
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
+  document.querySelectorAll("section.panel").forEach(p=>p.classList.toggle("active", p.id==="panel-"+b.dataset.tab));
+  if(b.dataset.tab==="sync") renderHistory();
+  if(b.dataset.tab==="manage") renderTagList();
+}));
+$("#cntRange").value = S.settings.count;
+$("#cntLabel").textContent = S.settings.count;
+$("#cntRange").addEventListener("input", e=>{
+  S.settings.count = Number(e.target.value);
+  $("#cntLabel").textContent = e.target.value; save();
+});
+document.querySelectorAll('input[name=sep]').forEach(el=>{
+  el.checked = el.value===S.settings.sep;
+  el.addEventListener("change", ()=>{ S.settings.sep = el.value; save(); renderResult(); });
+});
+$("#btnGenerate").addEventListener("click", generate);
+$("#btnShuffle").addEventListener("click", ()=>{ shuffle(S.current); save(); renderResult(); });
+$("#btnCopy").addEventListener("click", async ()=>{
+  if(!S.current) return;
+  if(!(await copyText(fmt(S.current)))){ toast("コピーできませんでした"); return; }
+  // コピー = 採用とみなして履歴と使用回数を更新
+  S.current.forEach(n=>{ const t=tagByName(n); if(t) t.used++; });
+  const d = new Date();
+  const when = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  if(!S.history[0] || S.history[0].tags.join()!==S.current.join()){
+    S.history.unshift({when, tags:S.current.slice()});
+    S.history = S.history.slice(0,20);
+  }
+  save(); toast("コピーしました(履歴に保存)");
+});
+$("#btnAdd").addEventListener("click", ()=>{
+  const raw = $("#addName").value.trim();
+  if(!raw) return;
+  const names = raw.split(/[\s,、]+/).map(s=>s.replace(/^#/,"")).filter(Boolean);
+  let added = 0;
+  names.forEach(name=>{
+    if(S.tags.some(t=>t.name===name)) return;
+    S.tags.push({id:S.settings.nextId++, name, size:$("#addSize").value, cat:$("#addCat").value, used:0});
+    added++;
+  });
+  $("#addName").value="";
+  save(); renderTagList();
+  toast(added ? `${added} 個追加しました` : "すでに登録済みです");
+});
+$("#btnAddCat").addEventListener("click", ()=>{
+  const c = $("#newCat").value.trim();
+  if(!c || S.cats.includes(c)) return;
+  S.cats.push(c); $("#newCat").value="";
+  save(); renderCatChecks(); toast("カテゴリを追加しました");
+});
+$("#q").addEventListener("input", renderTagList);
+$("#sortBy").addEventListener("change", renderTagList);
+$("#btnExport").addEventListener("click", async ()=>{
+  const data = JSON.stringify(S);
+  $("#ioArea").value = data;
+  toast((await copyText(data)) ? "データをコピーしました。別端末で貼り付けて取り込んでください" : "コピー失敗。テキスト欄から手動でコピーしてください");
+});
+$("#btnImport").addEventListener("click", ()=>{
+  try{
+    const d = JSON.parse($("#ioArea").value);
+    if(!d.tags || !d.cats) throw 0;
+    S = d; save();
+    renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+    $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
+    toast("取り込みました");
+  }catch(e){ toast("取り込めませんでした。書き出したテキストをそのまま貼り付けてください"); }
+});
+$("#btnReset").addEventListener("click", ()=>{
+  if(!confirm("登録タグ・履歴をすべて消して初期データに戻します。よろしいですか?")) return;
+  S = freshState(); save();
+  renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+  toast("初期データに戻しました");
+});
+
+/* ---------- 初期描画 ---------- */
+renderCatChecks(); renderTagList(); renderResult(); renderHistory();
+</script>
+</body>
+</html>
