@@ -1,0 +1,46 @@
+name: Pinterest Collect
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 毎日 08:00 JST (23:00 UTC)
+    - cron: "0 23 * * *"
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pinterest-collector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore seen-pin state
+        uses: actions/cache@v4
+        with:
+          path: pinterest-collector/state.json
+          key: pinterest-state-${{ github.run_id }}
+          restore-keys: pinterest-state-
+
+      - name: Collect pins
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+        run: |
+          CONFIG=config.yaml
+          [ -f "$CONFIG" ] || CONFIG=config.example.yaml
+          python -m collector --config "$CONFIG"
+
+      - name: Upload collected images
+        uses: actions/upload-artifact@v4
+        with:
+          name: collected-${{ github.run_number }}
+          path: pinterest-collector/collected/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,4 @@
+config.yaml
+collected/
+state.json
+__pycache__/

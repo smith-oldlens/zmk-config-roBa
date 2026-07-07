@@ -1,0 +1,57 @@
+# pinterest-collector 設定サンプル
+# このファイルを config.yaml にコピーして自分好みに編集してください。
+#   cp config.example.yaml config.yaml
+
+sources:
+  # Pinterest 公式 API v5(要 PINTEREST_ACCESS_TOKEN 環境変数)
+  api:
+    enabled: false
+    queries:
+      - "watercolor landscape painting"
+      - "浮世絵 風景"
+      - "film photography portrait"
+    per_query: 25
+
+  # 公開RSSフィード(APIキー不要)
+  # ユーザー全体:   https://www.pinterest.com/<username>/feed.rss
+  # 特定のボード:   https://www.pinterest.com/<username>/<board-slug>.rss
+  rss:
+    enabled: true
+    feeds:
+      - "https://www.pinterest.com/pinterest/feed.rss"
+
+# 好みの定義。タイトル+説明文にキーワードが含まれると加点/減点されます。
+preferences:
+  like_keywords:
+    - { word: "watercolor", weight: 2.0 }
+    - { word: "水彩", weight: 2.0 }
+    - { word: "landscape", weight: 1.0 }
+    - "illustration"          # weight 省略時は 1.0
+  dislike_keywords:
+    - { word: "nft", weight: 5.0 }
+    - { word: "ai generated", weight: 3.0 }
+  # このスコア以上のピンだけを収集
+  min_score: 1.0
+
+  # （オプション）CLIP による画像内容そのもののスコアリング。
+  # pip install -r requirements-clip.txt が必要。
+  clip:
+    enabled: false
+    positive_prompts:
+      - "a beautiful watercolor landscape painting"
+      - "soft pastel color illustration"
+    negative_prompts:
+      - "a screenshot of text"
+      - "a product advertisement"
+    weight: 3.0
+
+output:
+  # 画像とメタデータ(JSON)の保存先
+  download_dir: "./collected"
+  # （オプション）自分のボードに自動保存する場合はボードIDを指定(APIソースのみ)
+  save_to_board: null
+  # 1回の実行で収集する最大件数
+  max_items_per_run: 30
+
+# 収集済みピンの記録(重複防止)
+state_file: "./state.json"
