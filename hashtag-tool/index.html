@@ -222,9 +222,52 @@ footer.colophon{
   font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
 }
 footer.colophon .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:10px; letter-spacing:.28em; text-transform:uppercase; display:block; margin-top:4px}
+
+/* ---------- 背景写真レイヤー ---------- */
+#bgLayer{
+  position:fixed; inset:-24px; z-index:0; display:none; pointer-events:none;
+  background-size:cover; background-position:center; background-repeat:no-repeat;
+}
+.wrap{position:relative; z-index:1}
+body.has-bg .card,
+body.has-bg header.app{
+  background:color-mix(in srgb, var(--surface) 84%, transparent);
+  -webkit-backdrop-filter:blur(9px); backdrop-filter:blur(9px);
+}
+body.has-bg nav.tabs{background:color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter:blur(9px); backdrop-filter:blur(9px)}
+body.has-bg nav.tabs .seg{background:color-mix(in srgb, var(--surface2) 80%, transparent)}
+
+/* ---------- デザインタブ ---------- */
+.swatches{display:flex; flex-wrap:wrap; gap:9px}
+.swatches button{
+  width:38px; height:38px; border-radius:50%; cursor:pointer; padding:0;
+  border:2px solid var(--line2); position:relative; transition:transform .1s;
+  background:var(--sw);
+}
+.swatches button:hover{transform:scale(1.08)}
+.swatches button[aria-pressed="true"]{border-color:var(--ink); box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ink)}
+.swatches button span{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; opacity:0}
+.swatches button[aria-pressed="true"] span{opacity:1; text-shadow:0 1px 2px rgba(0,0,0,.5)}
+input[type=color]{
+  width:52px; height:38px; padding:2px; border:1px solid var(--line2); border-radius:9px;
+  background:var(--bg); cursor:pointer;
+}
+.mono-hint{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; color:var(--muted)}
+.filebtn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:11px 16px; border-radius:10px; cursor:pointer; align-self:flex-start;
+  border:1px solid var(--accent); color:var(--accent-deep); background:var(--accent-soft);
+  font-size:14px; font-weight:700; letter-spacing:.04em;
+}
+.filebtn::before{content:"🖼"; font-size:15px}
+.bgthumb{
+  margin-top:10px; height:96px; border-radius:10px; border:1px solid var(--line2);
+  background-size:cover; background-position:center;
+}
 </style>
 </head>
 <body>
+<div id="bgLayer" aria-hidden="true"></div>
 <div class="wrap">
   <header class="app">
     <div class="brand">
@@ -238,6 +281,7 @@ footer.colophon .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     <div class="seg">
       <button role="tab" aria-selected="true" data-tab="gen">生成</button>
       <button role="tab" aria-selected="false" data-tab="manage">タグ管理</button>
+      <button role="tab" aria-selected="false" data-tab="design">デザイン</button>
       <button role="tab" aria-selected="false" data-tab="sync">履歴・同期</button>
     </div>
   </nav>
@@ -325,6 +369,48 @@ footer.colophon .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       </div>
       <div class="checks" id="filterCats" style="margin-bottom:8px"></div>
       <div class="scrollbox"><table class="tags"><tbody id="tagRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ デザイン ============ -->
+  <section class="panel" id="panel-design">
+    <div class="card">
+      <h2>テーマカラー</h2>
+      <p class="hint">アクセントカラーを変えると、ボタンや見出し、選択中の色が変わります。</p>
+      <div class="field">
+        <label>プリセット</label>
+        <div class="swatches" id="paletteSwatches"></div>
+      </div>
+      <div class="field">
+        <label for="accentPicker">好きな色を選ぶ</label>
+        <div class="row">
+          <input type="color" id="accentPicker" aria-label="アクセントカラー">
+          <span id="accentHex" class="mono-hint">—</span>
+          <button class="btn ghost" id="btnAccentReset" style="margin-left:auto">標準に戻す</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>背景の写真</h2>
+      <p class="hint">お気に入りの1枚を薄く敷けます。写真は端末内だけで処理され、外部には送られません。</p>
+      <div class="field">
+        <label id="bgFileLabel" for="bgFile" class="filebtn">写真を選ぶ</label>
+        <input type="file" id="bgFile" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">
+        <div id="bgThumb" class="bgthumb" hidden></div>
+      </div>
+      <div class="field" id="bgOpacityField" hidden>
+        <label for="bgOpacity">濃さ: <span id="bgOpacityLabel"></span></label>
+        <input type="range" id="bgOpacity" min="5" max="60" step="1">
+      </div>
+      <div class="field" id="bgBlurField" hidden>
+        <label for="bgBlur">ぼかし: <span id="bgBlurLabel"></span></label>
+        <input type="range" id="bgBlur" min="0" max="14" step="1">
+      </div>
+      <div class="actions" id="bgRemoveWrap" hidden>
+        <button class="btn danger" id="btnBgRemove">背景写真を外す</button>
+      </div>
+      <p class="note">写真は各端末に保存されます(データの書き出し/取り込みには含まれません)。読み込み時に自動で縮小するので容量は軽めです。</p>
     </div>
   </section>
 
@@ -418,7 +504,8 @@ function freshState(){
     tags: PRESET.tags.map(([name,size,cat],i)=>({id:i+1, name, size, cat, used:0})),
     cats: PRESET.cats.slice(),
     history: [],
-    settings: {count:15, sep:"newline", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1},
+    settings: {count:15, sep:"newline", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1,
+               accent:null, bgOpacity:22, bgBlur:3, hasBg:false},
     caption: "",
     current: null
   };
@@ -429,8 +516,21 @@ catch(e){ S = freshState(); }
 if(!S.tags || !S.cats) S = freshState();
 if(S.caption === undefined) S.caption = "";
 if(!S.settings.sepMigrated){ S.settings.sep = "newline"; S.settings.sepMigrated = 1; } // 縦並びを新デフォルトに
+if(S.settings.accent === undefined) S.settings.accent = null;
+if(S.settings.bgOpacity === undefined) S.settings.bgOpacity = 22;
+if(S.settings.bgBlur === undefined) S.settings.bgBlur = 3;
+if(S.settings.hasBg === undefined) S.settings.hasBg = false;
 
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* 背景写真は容量が大きいので別キーに保存(毎回の保存でJSONを肥大させない) */
+const BG_KEY = "hashrotate.bg";
+let bgData = null;
+try{ bgData = localStorage.getItem(BG_KEY) || null; }catch(e){}
+function saveBg(){
+  try{ if(bgData){ localStorage.setItem(BG_KEY, bgData); } else { localStorage.removeItem(BG_KEY); } return true; }
+  catch(e){ return false; }
+}
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -457,6 +557,77 @@ function fullText(){
   const cap = (S.caption || "").trim();
   const tags = fmt(S.current || []);
   return cap ? cap + "\n\n" + tags : tags;
+}
+
+/* ---------- テーマカラー ---------- */
+const PALETTES = [
+  {name:"森",   hex:null},        // 標準(手調整のデフォルト)
+  {name:"夕景", hex:"#B5622B"},
+  {name:"桜",   hex:"#AF6A86"},
+  {name:"蒼",   hex:"#3E6E8E"},
+  {name:"苔金", hex:"#897F33"},
+  {name:"藤",   hex:"#6E5A93"},
+  {name:"墨",   hex:"#4B4B4B"},
+];
+function isDark(){
+  const t = document.documentElement.getAttribute("data-theme");
+  if(t==="dark") return true;
+  if(t==="light") return false;
+  return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function hexToRgb(h){ h=h.replace("#",""); if(h.length===3) h=h.split("").map(c=>c+c).join(""); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function toHex(r,g,b){ const f=x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,"0"); return "#"+f(r)+f(g)+f(b); }
+function mixHex(a,b,t){ const A=hexToRgb(a),B=hexToRgb(b); return toHex(A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,A[2]+(B[2]-A[2])*t); }
+function luma(h){ const c=hexToRgb(h).map(v=>{v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);}); return .2126*c[0]+.7152*c[1]+.0722*c[2]; }
+function applyAccent(){
+  const st = document.documentElement.style;
+  const acc = S.settings.accent;
+  if(!acc){ ["--accent","--accent-deep","--accent-soft","--accent-ink"].forEach(v=>st.removeProperty(v)); return; }
+  const dark = isDark();
+  const shown = dark ? mixHex(acc,"#ffffff",0.20) : acc;      // 暗色テーマでは少し明るく
+  st.setProperty("--accent", shown);
+  st.setProperty("--accent-deep", dark ? mixHex(shown,"#ffffff",0.15) : mixHex(acc,"#000000",0.20));
+  st.setProperty("--accent-soft", `color-mix(in srgb, ${shown} ${dark?24:16}%, transparent)`);
+  st.setProperty("--accent-ink", luma(shown) > 0.45 ? "#17201a" : "#ffffff");
+}
+if(window.matchMedia){
+  try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAccent); }catch(e){}
+}
+new MutationObserver(applyAccent).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+
+/* ---------- 背景写真 ---------- */
+function applyBg(){
+  const layer = $("#bgLayer");
+  if(bgData && S.settings.hasBg){
+    layer.style.backgroundImage = `url("${bgData}")`;
+    layer.style.opacity = (S.settings.bgOpacity/100).toFixed(2);
+    layer.style.filter = `blur(${S.settings.bgBlur}px)`;
+    layer.style.display = "block";
+    document.body.classList.add("has-bg");
+  }else{
+    layer.style.backgroundImage = "none";
+    layer.style.display = "none";
+    document.body.classList.remove("has-bg");
+  }
+}
+function downscaleToDataURL(file, cb){
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, max/Math.max(w,h));
+      w = Math.round(w*scale); h = Math.round(h*scale);
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      try{ cb(c.toDataURL("image/jpeg",0.72)); }catch(e){ cb(null); }
+    };
+    img.onerror = () => cb(null);
+    img.src = reader.result;
+  };
+  reader.onerror = () => cb(null);
+  reader.readAsDataURL(file);
 }
 
 /* ---------- 生成ロジック ---------- */
@@ -573,13 +744,74 @@ function renderHistory(){
   }));
 }
 
+function renderDesign(){
+  // パレットのスウォッチ
+  const cur = S.settings.accent;
+  $("#paletteSwatches").innerHTML = PALETTES.map((p,i)=>{
+    const col = p.hex || "#41634C";
+    const on = (p.hex||null) === (cur||null);
+    return `<button data-i="${i}" aria-pressed="${on}" title="${esc(p.name)}" style="--sw:${col}"><span>✓</span></button>`;
+  }).join("");
+  $("#paletteSwatches").querySelectorAll("button").forEach(b=>b.addEventListener("click", ()=>{
+    S.settings.accent = PALETTES[Number(b.dataset.i)].hex || null;
+    save(); applyAccent(); renderDesign();
+  }));
+  // カラーピッカー
+  $("#accentPicker").value = cur || "#41634C";
+  $("#accentHex").textContent = cur ? cur.toUpperCase() : "標準(森)";
+  // 背景写真
+  const has = !!(bgData && S.settings.hasBg);
+  $("#bgThumb").hidden = !has;
+  if(has) $("#bgThumb").style.backgroundImage = `url("${bgData}")`;
+  $("#bgFileLabel").textContent = has ? "別の写真に変える" : "写真を選ぶ";
+  ["#bgOpacityField","#bgBlurField","#bgRemoveWrap"].forEach(s=>{ $(s).hidden = !has; });
+  $("#bgOpacity").value = S.settings.bgOpacity; $("#bgOpacityLabel").textContent = S.settings.bgOpacity + "%";
+  $("#bgBlur").value = S.settings.bgBlur; $("#bgBlurLabel").textContent = S.settings.bgBlur + "px";
+}
+
 /* ---------- イベント ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click", ()=>{
   document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
   document.querySelectorAll("section.panel").forEach(p=>p.classList.toggle("active", p.id==="panel-"+b.dataset.tab));
   if(b.dataset.tab==="sync") renderHistory();
   if(b.dataset.tab==="manage") renderTagList();
+  if(b.dataset.tab==="design") renderDesign();
 }));
+
+/* テーマカラー操作 */
+$("#accentPicker").addEventListener("input", e=>{
+  S.settings.accent = e.target.value; save(); applyAccent();
+  $("#accentHex").textContent = e.target.value.toUpperCase();
+  renderDesign();
+});
+$("#btnAccentReset").addEventListener("click", ()=>{
+  S.settings.accent = null; save(); applyAccent(); renderDesign(); toast("標準の色に戻しました");
+});
+
+/* 背景写真操作 */
+$("#bgFile").addEventListener("change", e=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ""; // 同じ写真を選び直せるように
+  if(!file) return;
+  toast("写真を読み込み中…");
+  downscaleToDataURL(file, url=>{
+    if(!url){ toast("この画像は読み込めませんでした"); return; }
+    bgData = url; S.settings.hasBg = true;
+    if(!saveBg()){ bgData=null; S.settings.hasBg=false; save(); applyBg(); renderDesign(); toast("写真が大きすぎて保存できませんでした"); return; }
+    save(); applyBg(); renderDesign(); toast("背景に設定しました");
+  });
+});
+$("#bgOpacity").addEventListener("input", e=>{
+  S.settings.bgOpacity = Number(e.target.value); $("#bgOpacityLabel").textContent = e.target.value + "%";
+  save(); applyBg();
+});
+$("#bgBlur").addEventListener("input", e=>{
+  S.settings.bgBlur = Number(e.target.value); $("#bgBlurLabel").textContent = e.target.value + "px";
+  save(); applyBg();
+});
+$("#btnBgRemove").addEventListener("click", ()=>{
+  bgData = null; S.settings.hasBg = false; saveBg(); save(); applyBg(); renderDesign(); toast("背景写真を外しました");
+});
 $("#cntRange").value = S.settings.count;
 $("#cntLabel").textContent = S.settings.count;
 $("#caption").value = S.caption;
@@ -642,23 +874,31 @@ $("#btnImport").addEventListener("click", ()=>{
     const d = JSON.parse($("#ioArea").value);
     if(!d.tags || !d.cats) throw 0;
     if(d.caption === undefined) d.caption = "";
+    if(d.settings.accent === undefined) d.settings.accent = null;
+    if(d.settings.bgOpacity === undefined) d.settings.bgOpacity = 22;
+    if(d.settings.bgBlur === undefined) d.settings.bgBlur = 3;
+    d.settings.hasBg = !!bgData && d.settings.hasBg; // 背景写真は端末ごと(取り込み対象外)
     S = d; save();
     renderCatChecks(); renderTagList(); renderHistory(); renderResult();
     $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
     $("#caption").value = S.caption;
+    applyAccent(); applyBg();
     toast("取り込みました");
   }catch(e){ toast("取り込めませんでした。書き出したテキストをそのまま貼り付けてください"); }
 });
 $("#btnReset").addEventListener("click", ()=>{
-  if(!confirm("登録タグ・履歴をすべて消して初期データに戻します。よろしいですか?")) return;
+  if(!confirm("登録タグ・履歴・デザイン設定をすべて消して初期状態に戻します。よろしいですか?")) return;
   S = freshState(); save();
+  bgData = null; saveBg();
   renderCatChecks(); renderTagList(); renderHistory(); renderResult();
   $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
   $("#caption").value = S.caption;
-  toast("初期データに戻しました");
+  applyAccent(); applyBg();
+  toast("初期状態に戻しました");
 });
 
 /* ---------- 初期描画 ---------- */
+applyAccent(); applyBg();
 renderCatChecks(); renderTagList(); renderResult(); renderHistory();
 </script>
 </body>
