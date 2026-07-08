@@ -52,9 +52,19 @@ output:
   save_to_board: null
   # 1回の実行で収集する最大件数
   max_items_per_run: 30
+  # 収集後に HTML ギャラリー(👍/👎 付き)を自動生成するか
+  gallery: true
+  # ギャラリーの出力先(相対パスは download_dir 内に配置)
+  gallery_file: "gallery.html"
 
 # 収集済みピンの記録(重複防止)
 state_file: "./state.json"
 
 # アクセストークン/リフレッシュトークンのキャッシュ(--setup-auth で自動生成)
 token_cache_file: "./token_cache.json"
+
+# ギャラリーからエクスポートした 👍/👎 評価ファイル(--learn の入力)
+feedback_file: "./feedback.json"
+
+# フィードバックから学習した好みキーワード(--learn で自動更新)
+learned_file: "./learned.json"

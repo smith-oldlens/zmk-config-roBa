@@ -7,6 +7,8 @@ import sys
 
 from . import config as config_mod
 from .downloader import download_pin
+from .gallery import generate_gallery
+from .learn import apply_learned_to_prefs, learn_from_feedback, load_learned
 from .models import Pin
 from .oauth import PinterestAuth, run_interactive_setup
 from .scoring import score_pins
@@ -63,7 +65,9 @@ def collect(cfg: dict, dry_run: bool = False) -> int:
     fresh = [p for p in unique.values() if not state.is_seen(p.id)]
     log.info("Fetched %d pins (%d new).", len(unique), len(fresh))
 
-    prefs = cfg["preferences"]
+    # Merge feedback-learned keywords on top of the config preferences.
+    learned = load_learned(cfg["learned_file"])
+    prefs = apply_learned_to_prefs(cfg["preferences"], learned)
     fresh = score_pins(fresh, prefs)
     min_score = float(prefs.get("min_score", 1.0))
     picked = sorted(
@@ -93,6 +97,9 @@ def collect(cfg: dict, dry_run: bool = False) -> int:
             state.mark_seen(pin.id)
         state.save()
         log.info("Downloaded %d images to %s", downloaded, cfg["output"]["download_dir"])
+        if cfg["output"].get("gallery", True):
+            count = generate_gallery(cfg["output"]["download_dir"], cfg["output"]["gallery_file"])
+            log.info("Gallery updated: %s (%d items)", cfg["output"]["gallery_file"], count)
     return 0
 
 
@@ -109,6 +116,16 @@ def main(argv: list[str] | None = None) -> int:
         help="One-time interactive authorization to obtain a refresh token (requires "
         "PINTEREST_CLIENT_ID/SECRET); then exits",
     )
+    parser.add_argument(
+        "--learn",
+        action="store_true",
+        help="Update learned preferences from feedback.json (exported from the gallery), then exit",
+    )
+    parser.add_argument(
+        "--gallery",
+        action="store_true",
+        help="Regenerate the HTML gallery from already-collected images, then exit",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -121,6 +138,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.setup_auth:
         creds = config_mod.api_credentials()
         return run_interactive_setup(cfg, creds["client_id"], creds["client_secret"])
+
+    if args.learn:
+        return learn_from_feedback(cfg)
+
+    if args.gallery:
+        count = generate_gallery(cfg["output"]["download_dir"], cfg["output"]["gallery_file"])
+        log.info("Gallery written: %s (%d items)", cfg["output"]["gallery_file"], count)
+        return 0
 
     return collect(cfg, dry_run=args.dry_run)
 

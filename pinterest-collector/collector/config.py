@@ -21,9 +21,13 @@ DEFAULTS = {
         "download_dir": "./collected",
         "save_to_board": None,
         "max_items_per_run": 30,
+        "gallery": True,
+        "gallery_file": "gallery.html",
     },
     "state_file": "./state.json",
     "token_cache_file": "./token_cache.json",
+    "feedback_file": "./feedback.json",
+    "learned_file": "./learned.json",
 }
 
 
@@ -49,6 +53,15 @@ def load_config(path: str | Path) -> dict:
     cfg["output"]["download_dir"] = str((base / cfg["output"]["download_dir"]).resolve())
     cfg["state_file"] = str((base / cfg["state_file"]).resolve())
     cfg["token_cache_file"] = str((base / cfg["token_cache_file"]).resolve())
+    cfg["feedback_file"] = str((base / cfg["feedback_file"]).resolve())
+    cfg["learned_file"] = str((base / cfg["learned_file"]).resolve())
+
+    # The gallery lives inside the download dir so it can reference images by
+    # their bare filename.
+    gallery_file = Path(cfg["output"]["gallery_file"])
+    if not gallery_file.is_absolute():
+        gallery_file = Path(cfg["output"]["download_dir"]) / gallery_file
+    cfg["output"]["gallery_file"] = str(gallery_file)
     return cfg
 
 
