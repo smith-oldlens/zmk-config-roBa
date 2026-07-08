@@ -36,12 +36,21 @@ object DnsMessage {
      * QR/RA set, RCODE=3, all other sections dropped.
      */
     fun buildBlockedResponse(query: ByteArray): ByteArray? {
+        return buildErrorResponse(query, 3)
+    }
+
+    /** Builds a SERVFAIL response when every upstream resolver is unavailable. */
+    fun buildServerFailureResponse(query: ByteArray): ByteArray? {
+        return buildErrorResponse(query, 2)
+    }
+
+    private fun buildErrorResponse(query: ByteArray, responseCode: Int): ByteArray? {
         val qEnd = questionEnd(query) ?: return null
         val resp = query.copyOfRange(0, qEnd)
         // Byte 2: QR=1, opcode=0, AA=0, TC=0, keep RD.
         resp[2] = ((resp[2].toInt() and 0x01) or 0x80).toByte()
-        // Byte 3: RA=1, RCODE=3 (NXDOMAIN).
-        resp[3] = 0x83.toByte()
+        // Byte 3: RA=1 plus the requested DNS response code.
+        resp[3] = (0x80 or (responseCode and 0x0F)).toByte()
         // QDCOUNT stays 1; zero out AN/NS/AR counts.
         for (i in 6..11) resp[i] = 0
         return resp

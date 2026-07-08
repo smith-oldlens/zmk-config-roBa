@@ -5,17 +5,23 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.net.URL
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * DNS-filtering VPN in the style of DNS66 / personalDNSfilter.
@@ -34,9 +40,17 @@ class AdBlockVpnService : VpnService() {
         private const val TAG = "AdBlockVpn"
         private const val VPN_ADDRESS = "10.111.222.1"
         private const val VIRTUAL_DNS = "10.111.222.53"
-        private const val UPSTREAM_DNS = "1.1.1.1"
+        private val UPSTREAM_DOH_URLS = listOf(
+            "https://cloudflare-dns.com/dns-query",
+            "https://dns.google/dns-query",
+        )
         private const val CHANNEL_ID = "adblock_vpn"
         private const val NOTIFICATION_ID = 1
+        private const val VPN_MTU = 9000
+        private const val DNS_WORKERS = 4
+        private const val DNS_QUEUE_CAPACITY = 128
+        private const val DNS_TIMEOUT_MS = 5_000
+        private const val MAX_DNS_MESSAGE_SIZE = VPN_MTU - 28
 
         @Volatile
         var isRunning = false
@@ -45,8 +59,34 @@ class AdBlockVpnService : VpnService() {
 
     private var tun: ParcelFileDescriptor? = null
     private var workerThread: Thread? = null
-    private var executor: ExecutorService? = null
+    private var executor: ThreadPoolExecutor? = null
     private var blockList = BlockList(emptySet())
+    private lateinit var connectivityManager: ConnectivityManager
+
+    @Volatile
+    private var underlyingNetwork: Network? = null
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            underlyingNetwork = network
+            if (isRunning) setUnderlyingNetworks(arrayOf(network))
+        }
+
+        override fun onLost(network: Network) {
+            if (underlyingNetwork == network) underlyingNetwork = null
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        connectivityManager = getSystemService(ConnectivityManager::class.java)
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        connectivityManager.registerNetworkCallback(request, networkCallback)
+        underlyingNetwork = connectivityManager.activeNetwork?.takeIf(::isUsableUnderlyingNetwork)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
@@ -69,11 +109,13 @@ class AdBlockVpnService : VpnService() {
 
         val builder = Builder()
             .setSession(getString(R.string.app_name))
-            .setMtu(1500)
+            .setMtu(VPN_MTU)
             .addAddress(VPN_ADDRESS, 24)
             .addDnsServer(VIRTUAL_DNS)
             .addRoute(VIRTUAL_DNS, 32)
             .setBlocking(true)
+
+        val network = currentUnderlyingNetwork()
         try {
             builder.addDisallowedApplication(packageName)
         } catch (e: Exception) {
@@ -87,7 +129,14 @@ class AdBlockVpnService : VpnService() {
             return
         }
         tun = fd
-        executor = Executors.newFixedThreadPool(4)
+        network?.let { setUnderlyingNetworks(arrayOf(it)) }
+        executor = ThreadPoolExecutor(
+            DNS_WORKERS,
+            DNS_WORKERS,
+            0L,
+            TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue(DNS_QUEUE_CAPACITY),
+        )
         isRunning = true
         startForeground(NOTIFICATION_ID, buildNotification())
 
@@ -132,11 +181,15 @@ class AdBlockVpnService : VpnService() {
             val response = DnsMessage.buildBlockedResponse(dns) ?: return
             writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, response)
         } else {
-            executor?.execute { forwardQuery(dns, srcIp, srcPort, dstIp, dstPort, output) }
+            try {
+                executor?.execute { forwardQuery(dns, srcIp, srcPort, dstIp, dstPort, output) }
+            } catch (_: RejectedExecutionException) {
+                writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
+            }
         }
     }
 
-    /** Sends the query to the real resolver outside the VPN and relays the answer back. */
+    /** Sends the query to an encrypted DNS resolver and relays the answer back. */
     private fun forwardQuery(
         dns: ByteArray,
         srcIp: ByteArray,
@@ -145,19 +198,79 @@ class AdBlockVpnService : VpnService() {
         dstPort: Int,
         output: FileOutputStream,
     ) {
-        try {
-            DatagramSocket().use { socket ->
-                protect(socket)
-                socket.soTimeout = 5000
-                socket.send(DatagramPacket(dns, dns.size, InetAddress.getByName(UPSTREAM_DNS), 53))
-                val buf = ByteArray(4096)
-                val reply = DatagramPacket(buf, buf.size)
-                socket.receive(reply)
-                writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, buf.copyOf(reply.length))
+        for (resolverUrl in UPSTREAM_DOH_URLS) {
+            try {
+                val reply = queryDoh(resolverUrl, dns)
+                writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
+                return
+            } catch (e: IOException) {
+                Log.w(TAG, "encrypted DNS resolver unavailable; trying fallback", e)
             }
-        } catch (e: IOException) {
-            // Timeouts and network hiccups: drop the query, the client will retry.
         }
+        writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
+    }
+
+    private fun queryDoh(resolverUrl: String, dns: ByteArray): ByteArray {
+        val network = currentUnderlyingNetwork() ?: throw IOException("No underlying network")
+        val connection = network.openConnection(URL(resolverUrl)) as HttpsURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = DNS_TIMEOUT_MS
+        connection.readTimeout = DNS_TIMEOUT_MS
+        connection.doOutput = true
+        connection.instanceFollowRedirects = false
+        connection.setRequestProperty("Accept", "application/dns-message")
+        connection.setRequestProperty("Content-Type", "application/dns-message")
+        connection.setFixedLengthStreamingMode(dns.size)
+
+        return try {
+            connection.outputStream.use { it.write(dns) }
+            if (connection.responseCode != HttpsURLConnection.HTTP_OK) {
+                throw IOException("DoH returned HTTP ${connection.responseCode}")
+            }
+            connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(4096)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (output.size() + read > MAX_DNS_MESSAGE_SIZE) {
+                        throw IOException("DNS response too large")
+                    }
+                    output.write(buffer, 0, read)
+                }
+                output.toByteArray().also {
+                    if (it.size < 12) throw IOException("DNS response too short")
+                    if (DnsMessage.readU16(it, 0) != DnsMessage.readU16(dns, 0)) {
+                        throw IOException("DNS transaction ID mismatch")
+                    }
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun currentUnderlyingNetwork(): Network? {
+        return underlyingNetwork
+            ?: connectivityManager.activeNetwork?.takeIf(::isUsableUnderlyingNetwork)
+    }
+
+    private fun isUsableUnderlyingNetwork(network: Network): Boolean {
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    }
+
+    private fun writeErrorResponse(
+        dns: ByteArray,
+        srcIp: ByteArray,
+        srcPort: Int,
+        dstIp: ByteArray,
+        dstPort: Int,
+        output: FileOutputStream,
+    ) {
+        val response = DnsMessage.buildServerFailureResponse(dns) ?: return
+        writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, response)
     }
 
     /** Writes an IPv4/UDP packet carrying [payload] back into the TUN device. */
@@ -273,6 +386,11 @@ class AdBlockVpnService : VpnService() {
 
     override fun onDestroy() {
         stopVpn()
+        try {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        } catch (_: IllegalArgumentException) {
+            // Callback was already unregistered.
+        }
         super.onDestroy()
     }
 }
