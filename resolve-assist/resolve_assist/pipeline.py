@@ -42,6 +42,13 @@ class AnalyzeOptions:
     scene_threshold: float = 27.0
     filler_dict_path: str | None = None
     max_chars_per_line: int = 26
+    srt_max_lines: int = 2
+    srt_min_duration: float = 0.0
+
+    # 学習済みスタイルプロファイル (style.json の中身)。
+    # 無音カットパラメータや字幕体裁の上書きは CLI/GUI 側で行い、
+    # パイプラインでは構成ガイドマーカーと音量比較に使う。
+    style: dict | None = None
 
     # 対象の編集ソフト: "resolve" / "fcp" (Final Cut Pro) / "premiere" (Premiere Pro)
     targets: set[str] = field(default_factory=lambda: {"resolve"})
@@ -180,12 +187,26 @@ def analyze(
             Marker(sec=c, name="シーン切替", color="Blue") for c in result.scene_cuts
         )
 
+    # --- スタイル適用 (構成ガイドマーカー・音量比較) ---
+    if opts.style:
+        from .style import loudness_report, structure_guide_markers
+
+        guide = structure_guide_markers(opts.style, result.segments)
+        if guide:
+            markers.extend(guide)
+            emit(f"構成ガイドマーカーを {len(guide)} 個追加 (お手本の型)")
+        report = loudness_report(opts.style, video_path, log=emit)
+        if report:
+            (out_dir / "style_report.txt").write_text(report, encoding="utf-8")
+
     # --- 字幕出力 ---
     if opts.do_subtitles and result.transcript:
         result.srt_path = srt_mod.write_srt(
             result.transcript,
             out_dir / "subtitles.srt",
             max_chars_per_line=opts.max_chars_per_line,
+            max_lines=opts.srt_max_lines,
+            min_duration=opts.srt_min_duration,
         )
         emit(f"字幕を出力: {result.srt_path}")
 

@@ -85,3 +85,15 @@ def subtract_segments(
 def drop_short_segments(segments: list[Segment], min_duration: float) -> list[Segment]:
     """min_duration 秒未満の区間を捨てる。"""
     return [s for s in segments if s.duration >= min_duration]
+
+
+def timeline_time_to_source_time(
+    t: float, segments: list[Segment]
+) -> float | None:
+    """カット後タイムライン上の秒 t を、元素材上の秒に変換する。"""
+    acc = 0.0
+    for seg in segments:
+        if t <= acc + seg.duration:
+            return seg.start + (t - acc)
+        acc += seg.duration
+    return None

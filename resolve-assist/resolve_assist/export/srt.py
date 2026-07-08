@@ -1,10 +1,15 @@
-"""SRT 字幕の生成。日本語向けの行折り返し・分割整形付き。"""
+"""SRT 字幕の生成とパース。日本語向けの行折り返し・分割整形付き。"""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..types import TranscriptSegment
+
+_SRT_TIME_RE = re.compile(
+    r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)"
+)
 
 # 行を折り返しやすい文字(この直後で改行する)
 _BREAK_AFTER = "、。!?!?…とがはをにでへもね"
@@ -73,11 +78,33 @@ def split_segment_for_subtitles(
     return result
 
 
+def parse_srt(text: str) -> list[TranscriptSegment]:
+    """SRT 文字列をパースする。text には行構造 (\\n) を保持する。"""
+    segments: list[TranscriptSegment] = []
+    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip())
+    for block in blocks:
+        lines = block.split("\n")
+        time_idx = next(
+            (i for i, l in enumerate(lines) if _SRT_TIME_RE.search(l)), None
+        )
+        if time_idx is None:
+            continue
+        m = _SRT_TIME_RE.search(lines[time_idx])
+        h1, m1, s1, ms1, h2, m2, s2, ms2 = (int(g) for g in m.groups())
+        start = h1 * 3600 + m1 * 60 + s1 + ms1 / 1000
+        end = h2 * 3600 + m2 * 60 + s2 + ms2 / 1000
+        body = "\n".join(lines[time_idx + 1 :]).strip()
+        if body:
+            segments.append(TranscriptSegment(start=start, end=end, text=body))
+    return segments
+
+
 def format_srt(
     segments: list[TranscriptSegment],
     max_chars_per_line: int = 26,
     max_lines: int = 2,
     min_gap: float = 0.001,
+    min_duration: float = 0.0,
 ) -> str:
     """TranscriptSegment のリストから SRT 文字列を生成する。"""
     entries: list[TranscriptSegment] = []
@@ -90,6 +117,14 @@ def format_srt(
     for prev, cur in zip(entries, entries[1:]):
         if cur.start < prev.end:
             cur.start = prev.end + min_gap
+
+    # 最短表示時間を確保 (次の字幕に食い込まない範囲で延長)
+    if min_duration > 0:
+        for i, seg in enumerate(entries):
+            limit = entries[i + 1].start - min_gap if i + 1 < len(entries) else float("inf")
+            new_end = min(seg.start + min_duration, limit)
+            if new_end > seg.end:
+                seg.end = new_end
 
     out: list[str] = []
     for i, seg in enumerate(entries, start=1):

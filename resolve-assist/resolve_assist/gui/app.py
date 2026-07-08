@@ -23,8 +23,8 @@ class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         root.title("Resolve Assist — カット & 字幕補助")
-        root.geometry("760x700")
-        root.minsize(640, 600)
+        root.geometry("780x800")
+        root.minsize(660, 680)
 
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
@@ -36,6 +36,7 @@ class App:
         self.target_resolve = tk.BooleanVar(value=True)
         self.target_fcp = tk.BooleanVar(value=False)
         self.target_premiere = tk.BooleanVar(value=False)
+        self.style_path = tk.StringVar()
         self.silence_db = tk.DoubleVar(value=-35.0)
         self.min_silence = tk.DoubleVar(value=0.35)
         self.pad_before = tk.DoubleVar(value=0.10)
@@ -108,6 +109,26 @@ class App:
             target, text="Premiere Pro (XML)", variable=self.target_premiere
         ).grid(row=0, column=2, sticky="w", padx=8, pady=2)
 
+        # スタイル学習
+        style_frame = ttk.LabelFrame(frame, text="お手本スタイル (任意)")
+        style_frame.pack(fill="x", **pad)
+        style_row = ttk.Frame(style_frame)
+        style_row.pack(fill="x", padx=8, pady=4)
+        ttk.Entry(style_row, textvariable=self.style_path).pack(
+            side="left", fill="x", expand=True
+        )
+        ttk.Button(style_row, text="選択...", command=self._choose_style).pack(
+            side="left", padx=4
+        )
+        ttk.Button(
+            style_row, text="お手本から学習...", command=self._learn_style
+        ).pack(side="left")
+        ttk.Label(
+            style_frame,
+            text="お手本動画から学習した style.json を指定すると、"
+            "カットのテンポ・字幕体裁・構成・音量感をお手本に合わせます",
+        ).pack(anchor="w", padx=8, pady=(0, 4))
+
         # パラメータ
         params = ttk.LabelFrame(frame, text="パラメータ")
         params.pack(fill="x", **pad)
@@ -177,6 +198,82 @@ class App:
         if path:
             self.output_dir.set(path)
 
+    def _choose_style(self):
+        path = filedialog.askopenfilename(
+            title="style.json を選択",
+            filetypes=[("スタイルプロファイル", "*.json"), ("すべて", "*")],
+        )
+        if path:
+            self.style_path.set(path)
+            self._load_style_into_fields(path)
+
+    def _load_style_into_fields(self, path: str):
+        """スタイルの無音カットパラメータを入力欄に反映する (ユーザーが微調整可能)。"""
+        try:
+            from ..style import load_style, silence_options_from_style
+
+            profile = load_style(path)
+        except (OSError, ValueError) as e:
+            messagebox.showerror("Resolve Assist", f"style.json を読めません:\n{e}")
+            self.style_path.set("")
+            return
+        sil = silence_options_from_style(profile)
+        if sil.get("min_silence") is not None:
+            self.min_silence.set(sil["min_silence"])
+        if sil.get("pad_before") is not None:
+            self.pad_before.set(sil["pad_before"])
+        if sil.get("pad_after") is not None:
+            self.pad_after.set(sil["pad_after"])
+        self._log(f"スタイルを読み込み、パラメータに反映しました: {path}")
+
+    def _learn_style(self):
+        if self._running:
+            return
+        video = filedialog.askopenfilename(
+            title="お手本の動画を選択",
+            filetypes=[
+                ("動画/音声", "*.mp4 *.mov *.mkv *.avi *.m4v *.wav *.mp3 *.m4a"),
+                ("すべて", "*"),
+            ],
+        )
+        if not video:
+            return
+        srt = filedialog.askopenfilename(
+            title="お手本の字幕 SRT (あれば選択、なければキャンセル)",
+            filetypes=[("SRT字幕", "*.srt"), ("すべて", "*")],
+        ) or None
+
+        self._running = True
+        self.run_button.configure(state="disabled")
+        self.progress.start(12)
+        self._log("=" * 60)
+        self._log("お手本からスタイルを学習します...")
+
+        def worker():
+            try:
+                from ..style import learn_style, save_style
+
+                profile = learn_style(
+                    video,
+                    srt_path=srt,
+                    whisper_model=self.whisper_model.get(),
+                    log=self._log,
+                )
+                out = str(Path(video).with_name(f"{Path(video).stem}_style.json"))
+                save_style(profile, out)
+                self._log(f"スタイルプロファイルを保存: {out}")
+                self.root.after(0, lambda: self._on_style_learned(out))
+            except Exception as e:
+                self._log(f"エラー: {e}")
+                self.root.after(0, self._on_done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_style_learned(self, style_path: str):
+        self._on_done()
+        self.style_path.set(style_path)
+        self._load_style_into_fields(style_path)
+
     def _log(self, msg: str):
         self._log_queue.put(msg)
 
@@ -216,6 +313,20 @@ class App:
             )
             return
 
+        profile = None
+        style_path = self.style_path.get().strip()
+        if style_path:
+            try:
+                from ..style import load_style
+
+                profile = load_style(style_path)
+            except (OSError, ValueError) as e:
+                messagebox.showerror(
+                    "Resolve Assist", f"style.json を読めません:\n{e}"
+                )
+                return
+        style_subs = (profile.get("subtitles") or {}) if profile else {}
+
         options = AnalyzeOptions(
             do_silence=self.do_silence.get(),
             do_subtitles=self.do_subtitles.get(),
@@ -229,6 +340,10 @@ class App:
                 pad_after=self.pad_after.get(),
             ),
             whisper_model=self.whisper_model.get(),
+            max_chars_per_line=int(style_subs.get("max_chars_per_line") or 26),
+            srt_max_lines=int(style_subs.get("max_lines") or 2),
+            srt_min_duration=float(style_subs.get("min_duration_sec") or 0.0),
+            style=profile,
             targets=targets,
             output_dir=self.output_dir.get().strip() or None,
         )
