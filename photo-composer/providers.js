@@ -3,9 +3,11 @@
 // 新しいプロバイダーを追加するときは、gemini.js/openai.js と同じ形の
 // プロバイダーオブジェクトを作って PROVIDERS に足すだけでよい。
 import { gemini } from './gemini.js';
-import { openai } from './openai.js';
+// OpenAI (gpt-image-1) は実装済みだが、組織の本人確認・課金設定が
+// 済むまで一旦無効化している。有効化するには下の2行のコメントを外すだけでよい。
+// import { openai } from './openai.js';
 
-export const PROVIDERS = [gemini, openai];
+export const PROVIDERS = [gemini/*, openai */];
 
 const PROVIDER_STORAGE = 'sceneComposer.provider';
 const keyStorageOf = (id) => `sceneComposer.apiKey.${id}`;
