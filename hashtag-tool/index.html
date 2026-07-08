@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ハッシュタグローテーター</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{
+  --bg:#F4F3EF; --surface:#FCFCFA; --surface2:#ECEDE6;
+  --ink:#20261F; --muted:#6C7465; --line:#DFE1D6; --line2:#D2D5C7;
+  --accent:#41634C; --accent-ink:#F7FAF5; --accent-soft:#E3ECE3; --accent-deep:#33513D;
+  --big:#A8761F; --mid:#4A6E86; --niche:#4E8A63;
+  --big-soft:rgba(168,118,31,.10); --mid-soft:rgba(74,110,134,.10); --niche-soft:rgba(78,138,99,.12);
+  --danger:#A8443A;
+  --shadow:0 1px 2px rgba(32,38,31,.05),0 6px 20px rgba(32,38,31,.05);
+  --bokeh1:rgba(65,99,76,.14); --bokeh2:rgba(168,118,31,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111511; --surface:#181E18; --surface2:#212823;
+    --ink:#E7EAE2; --muted:#96A091; --line:#2A322A; --line2:#37413A;
+    --accent:#A5C4AC; --accent-ink:#0F1811; --accent-soft:#20302A; --accent-deep:#BBD6C1;
+    --big:#D9A45C; --mid:#8FB4CC; --niche:#8CC4A0;
+    --big-soft:rgba(217,164,92,.12); --mid-soft:rgba(143,180,204,.12); --niche-soft:rgba(140,196,160,.13);
+    --danger:#DE8078;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.35);
+    --bokeh1:rgba(165,196,172,.10); --bokeh2:rgba(217,164,92,.07);
+  }
+}
+:root[data-theme="light"]{
+  --bg:#F4F3EF; --surface:#FCFCFA; --surface2:#ECEDE6;
+  --ink:#20261F; --muted:#6C7465; --line:#DFE1D6; --line2:#D2D5C7;
+  --accent:#41634C; --accent-ink:#F7FAF5; --accent-soft:#E3ECE3; --accent-deep:#33513D;
+  --big:#A8761F; --mid:#4A6E86; --niche:#4E8A63;
+  --big-soft:rgba(168,118,31,.10); --mid-soft:rgba(74,110,134,.10); --niche-soft:rgba(78,138,99,.12);
+  --danger:#A8443A;
+  --shadow:0 1px 2px rgba(32,38,31,.05),0 6px 20px rgba(32,38,31,.05);
+  --bokeh1:rgba(65,99,76,.14); --bokeh2:rgba(168,118,31,.10);
+}
+:root[data-theme="dark"]{
+  --bg:#111511; --surface:#181E18; --surface2:#212823;
+  --ink:#E7EAE2; --muted:#96A091; --line:#2A322A; --line2:#37413A;
+  --accent:#A5C4AC; --accent-ink:#0F1811; --accent-soft:#20302A; --accent-deep:#BBD6C1;
+  --big:#D9A45C; --mid:#8FB4CC; --niche:#8CC4A0;
+  --big-soft:rgba(217,164,92,.12); --mid-soft:rgba(143,180,204,.12); --niche-soft:rgba(140,196,160,.13);
+  --danger:#DE8078;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.35);
+  --bokeh1:rgba(165,196,172,.10); --bokeh2:rgba(217,164,92,.07);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI","Yu Gothic",sans-serif;
+  font-size:15px; line-height:1.7;
+  -webkit-text-size-adjust:100%;
+}
+.serif{font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif}
+.wrap{max-width:720px; margin:0 auto; padding:0 16px 72px}
+
+/* ---------- ヘッダー: 玉ボケの光 ---------- */
+header.app{
+  position:relative; overflow:hidden;
+  margin:14px 0 0; padding:26px 22px 24px;
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  box-shadow:var(--shadow);
+}
+header.app::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(circle 110px at 88% 8%,   var(--bokeh1), transparent 72%),
+    radial-gradient(circle 70px  at 72% 88%,  var(--bokeh2), transparent 72%),
+    radial-gradient(circle 46px  at 97% 62%,  var(--bokeh1), transparent 70%),
+    radial-gradient(circle 30px  at 62% 18%,  var(--bokeh2), transparent 70%),
+    radial-gradient(circle 90px  at 6% 108%,  var(--bokeh1), transparent 74%);
+}
+.brand{position:relative}
+.brand .en{
+  display:block; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:10.5px; letter-spacing:.32em; color:var(--muted); text-transform:uppercase; margin-bottom:6px;
+}
+.brand h1{
+  margin:0; font-size:26px; font-weight:600; letter-spacing:.06em; line-height:1.3;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+  text-wrap:balance;
+}
+.brand h1 b{color:var(--accent-deep); font-weight:600}
+.brand p{margin:8px 0 0; color:var(--muted); font-size:12.5px; max-width:34em}
+
+/* ---------- タブ: セグメントコントロール ---------- */
+nav.tabs{
+  position:sticky; top:0; z-index:20;
+  background:var(--bg); padding:12px 0 14px; margin-bottom:4px;
+}
+nav.tabs .seg{
+  display:flex; gap:3px; padding:3px;
+  background:var(--surface2); border:1px solid var(--line); border-radius:11px;
+}
+nav.tabs button{
+  flex:1; border:none; background:transparent; color:var(--muted);
+  padding:8px 4px; border-radius:8px; font-size:13.5px; font-weight:700;
+  letter-spacing:.02em; cursor:pointer; font-family:inherit;
+  transition:background .15s, color .15s;
+}
+nav.tabs button[aria-selected="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.12)}
+nav.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+section.panel{display:none}
+section.panel.active{display:block}
+
+/* ---------- カード ---------- */
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:20px 18px; margin:14px 0; box-shadow:var(--shadow);
+}
+.card h2{
+  margin:0 0 4px; font-size:16px; font-weight:600; letter-spacing:.08em;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+}
+.card .hint{margin:0 0 14px; color:var(--muted); font-size:12.5px}
+
+/* ---------- フォーム ---------- */
+.row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.field{display:flex; flex-direction:column; gap:5px; margin-bottom:14px}
+.field label, .iolabel{
+  font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.12em;
+}
+input[type=text], select, textarea{
+  font-family:inherit; font-size:15px; color:var(--ink);
+  background:var(--bg); border:1px solid var(--line2); border-radius:10px; padding:10px 12px; width:100%;
+  transition:border-color .15s;
+}
+input[type=text]:focus, select:focus, textarea:focus{border-color:var(--accent)}
+textarea{font-size:14px; min-height:110px; resize:vertical; line-height:1.7}
+textarea#resultText, textarea#ioArea{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px}
+select{appearance:none; -webkit-appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%),linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size:5px 5px; background-repeat:no-repeat; padding-right:30px;
+}
+input[type=range]{width:100%; accent-color:var(--accent); margin:4px 0}
+
+/* ---------- ボタン ---------- */
+button.btn{
+  font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+  border:1px solid var(--line2); background:var(--surface); color:var(--ink);
+  padding:10px 14px; border-radius:10px;
+  transition:transform .08s, background .15s, border-color .15s;
+}
+button.btn:active{transform:scale(.98)}
+button.btn:hover{border-color:var(--accent)}
+button.btn.primary{
+  background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
+  font-size:15px; letter-spacing:.14em; padding:14px 18px; width:100%;
+}
+button.btn.primary:hover{filter:brightness(1.06)}
+button.btn.ghost{background:transparent}
+button.btn.danger{color:var(--danger); border-color:var(--danger); background:transparent}
+button.btn:disabled{opacity:.4; cursor:default; transform:none}
+@media (prefers-reduced-motion: reduce){ button.btn, nav.tabs button{transition:none} button.btn:active{transform:none} }
+
+/* ---------- チェック(カテゴリ・区切り) ---------- */
+.checks{display:flex; flex-wrap:wrap; gap:7px}
+.checks label{
+  display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+  border:1px solid var(--line2); background:transparent; border-radius:999px;
+  padding:7px 13px; font-size:13px; font-weight:600; color:var(--muted);
+  transition:background .15s, border-color .15s, color .15s;
+}
+.checks label:has(input:checked){background:var(--accent-soft); border-color:var(--accent); color:var(--ink)}
+.checks input{accent-color:var(--accent); margin:0}
+
+/* ---------- 生成結果 ---------- */
+.result-tags{display:flex; flex-wrap:wrap; gap:7px; margin:12px 0 16px}
+.tagchip{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px;
+  border:1px solid var(--line); border-radius:8px; padding:5px 10px;
+}
+.tagchip.big{background:var(--big-soft)} .tagchip.mid{background:var(--mid-soft)} .tagchip.niche{background:var(--niche-soft)}
+.dot{display:inline-block; width:7px; height:7px; border-radius:50%; flex:none}
+.dot.big{background:var(--big)} .dot.mid{background:var(--mid)} .dot.niche{background:var(--niche)}
+.legend{display:flex; flex-wrap:wrap; gap:5px 16px; font-size:11.5px; color:var(--muted); margin-bottom:8px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.stats{font-size:12.5px; color:var(--muted); margin:0 0 6px}
+.stats b{color:var(--ink); font-variant-numeric:tabular-nums}
+.preview-head{display:flex; align-items:baseline; justify-content:space-between; margin:6px 0 5px}
+.actions{display:flex; gap:8px; margin-top:12px}
+.actions .btn{flex:1}
+
+/* ---------- タグ一覧 ---------- */
+table.tags{width:100%; border-collapse:collapse; font-size:13.5px}
+table.tags td{padding:8px 6px; border-top:1px solid var(--line); vertical-align:middle}
+table.tags td.name{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; word-break:break-all}
+table.tags td.meta{color:var(--muted); font-size:11.5px; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
+table.tags button.x{
+  border:none; background:none; color:var(--muted); font-size:15px; cursor:pointer;
+  padding:2px 8px; border-radius:6px; transition:color .15s;
+}
+table.tags button.x:hover{color:var(--danger)}
+.scrollbox{overflow-x:auto}
+
+/* ---------- 履歴 ---------- */
+.hist{border-top:1px solid var(--line); padding:12px 0}
+.hist:first-of-type{border-top:none; padding-top:2px}
+.hist .when{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; letter-spacing:.06em}
+.hist .tags{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; margin:5px 0 9px; word-break:break-all; color:var(--ink); line-height:1.8}
+
+/* ---------- トースト・フッター ---------- */
+#toast{
+  position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(8px);
+  background:var(--ink); color:var(--bg); font-size:13.5px; font-weight:700;
+  padding:11px 20px; border-radius:999px; opacity:0; pointer-events:none;
+  transition:opacity .2s, transform .2s; z-index:50; box-shadow:var(--shadow);
+  max-width:calc(100vw - 48px); text-align:center;
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion: reduce){ #toast{transition:none} }
+.note{font-size:12px; color:var(--muted); border-left:2px solid var(--accent); padding-left:12px; margin:14px 0 0; line-height:1.8}
+footer.colophon{
+  margin:34px 0 0; text-align:center; color:var(--muted); font-size:11.5px; letter-spacing:.14em;
+  font-family:"Hiragino Mincho ProN","Hiragino Mincho Pro","Yu Mincho","YuMincho","Noto Serif JP",serif;
+}
+footer.colophon .en{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:10px; letter-spacing:.28em; text-transform:uppercase; display:block; margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <div class="brand">
+      <span class="en">Hashtag Rotator</span>
+      <h1>ハッシュタグ<b>ローテーター</b></h1>
+      <p>毎回ちがう組み合わせを自動で編む — 本文とタグをひとつにして、コピーひとつで投稿へ。</p>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <div class="seg">
+      <button role="tab" aria-selected="true" data-tab="gen">生成</button>
+      <button role="tab" aria-selected="false" data-tab="manage">タグ管理</button>
+      <button role="tab" aria-selected="false" data-tab="sync">履歴・同期</button>
+    </div>
+  </nav>
+
+  <!-- ============ 生成 ============ -->
+  <section class="panel active" id="panel-gen">
+    <div class="card">
+      <h2>今回の投稿</h2>
+      <p class="hint">「生成」を押すたびに、前回と重なりすぎない組み合わせを作ります。コピーすると本文+ハッシュタグがまとめてコピーされ、そのままInstagramに貼り付けられます。</p>
+      <div class="field">
+        <label for="caption">キャプション(本文)</label>
+        <textarea id="caption" placeholder="投稿の本文をここに入力…" style="min-height:80px"></textarea>
+      </div>
+      <div class="legend">
+        <span><i class="dot big"></i>ビッグ(投稿数 多)</span>
+        <span><i class="dot mid"></i>ミドル</span>
+        <span><i class="dot niche"></i>ニッチ(投稿数 少)</span>
+      </div>
+      <p class="stats" id="genStats">まだ生成していません</p>
+      <div class="result-tags" id="resultChips"></div>
+      <div class="preview-head">
+        <span class="iolabel">投稿プレビュー(コピーされる内容)</span>
+      </div>
+      <textarea id="resultText" readonly placeholder="ここに本文+ハッシュタグの完成形が表示されます" style="min-height:150px"></textarea>
+      <div class="actions">
+        <button class="btn" id="btnShuffle" disabled>並びシャッフル</button>
+        <button class="btn" id="btnCopy" disabled>まとめてコピー</button>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="btnGenerate">タグセットを生成</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>生成の設定</h2>
+      <div class="field">
+        <label for="cntRange">タグ数: <span id="cntLabel">12</span> 個(推奨 8〜15)</label>
+        <input type="range" id="cntRange" min="5" max="30" value="12">
+      </div>
+      <div class="field">
+        <label>使うカテゴリ</label>
+        <div class="checks" id="catChecks"></div>
+      </div>
+      <div class="field">
+        <label>ハッシュタグの並べ方</label>
+        <div class="checks" id="sepChecks">
+          <label><input type="radio" name="sep" value="newline" checked>縦(1行に1つ)</label>
+          <label><input type="radio" name="sep" value="space">横(スペース区切り)</label>
+        </div>
+      </div>
+      <p class="note">目安の配合 — ビッグ約2割・ミドル約5割・ニッチ約3割。直前のセットと同じタグは半分以上入れ替わるように選びます。</p>
+    </div>
+  </section>
+
+  <!-- ============ タグ管理 ============ -->
+  <section class="panel" id="panel-manage">
+    <div class="card">
+      <h2>タグを追加</h2>
+      <div class="field"><label for="addName">タグ(#は省略可・スペース区切りで複数可)</label>
+        <input type="text" id="addName" placeholder="例: 風景写真 landscapephotography"></div>
+      <div class="row">
+        <select id="addSize" style="flex:1">
+          <option value="big">ビッグ(数十万件〜)</option>
+          <option value="mid" selected>ミドル(数万件)</option>
+          <option value="niche">ニッチ(〜数千件)</option>
+        </select>
+        <select id="addCat" style="flex:1"></select>
+        <button class="btn" id="btnAdd">追加</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="newCat" placeholder="新しいカテゴリ名" style="flex:1">
+        <button class="btn ghost" id="btnAddCat">カテゴリ追加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>タグ一覧 <span id="tagCount" style="color:var(--muted);font-weight:600;font-size:12px"></span></h2>
+      <div class="row" style="margin-bottom:10px">
+        <input type="text" id="q" placeholder="検索…" style="flex:2">
+        <select id="sortBy" style="flex:1">
+          <option value="name">名前順</option>
+          <option value="size">サイズ順</option>
+          <option value="used">使用回数順</option>
+        </select>
+      </div>
+      <div class="checks" id="filterCats" style="margin-bottom:8px"></div>
+      <div class="scrollbox"><table class="tags"><tbody id="tagRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ 履歴・同期 ============ -->
+  <section class="panel" id="panel-sync">
+    <div class="card">
+      <h2>生成履歴</h2>
+      <p class="hint">直近20件。同じセットの使い回しチェックにも使えます。</p>
+      <div id="histList"><p class="hint">まだ履歴はありません。</p></div>
+    </div>
+    <div class="card">
+      <h2>スマホ ⇄ PC のデータ共有</h2>
+      <p class="hint">データはこの端末のブラウザに保存されます。別の端末へは、書き出したテキストを貼り付けて取り込んでください(LINEやメモの共有でOK)。</p>
+      <div class="actions">
+        <button class="btn" id="btnExport">書き出し(コピー)</button>
+        <button class="btn" id="btnImport">貼り付けて取り込み</button>
+      </div>
+      <textarea id="ioArea" placeholder="取り込み: ここに書き出したテキストを貼り付けて「取り込み」を押す"></textarea>
+      <div class="actions">
+        <button class="btn danger" id="btnReset">初期データに戻す</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    現実と幻想の間、その一枚のために
+    <span class="en">for @smith_oldlens</span>
+  </footer>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ---------- 初期データ ---------- */
+const PRESET = {
+  cats: ["基本","オールドレンズ","幻想・世界観","ポートレート・被写体","自然・花・鹿児島","掲載・リポスト狙い"],
+  tags: [
+    // 基本(コミュニティ系)
+    ["写真好きな人と繋がりたい","big","基本"],["ファインダー越しの私の世界","big","基本"],
+    ["カメラ好きな人と繋がりたい","big","基本"],["photography","big","基本"],
+    ["キリトリセカイ","mid","基本"],["その瞬間に物語を","mid","基本"],
+    ["写真撮ってる人と繋がりたい","mid","基本"],["レンズ越しの私の世界","mid","基本"],
+    ["写真で伝えたい私の世界","mid","基本"],["私の写真もっと広まれ","niche","基本"],
+    ["写真好きさんと繋がりたい","niche","基本"],
+    // オールドレンズ
+    ["オールドレンズ","big","オールドレンズ"],["oldlens","big","オールドレンズ"],
+    ["オールドレンズに恋をした","mid","オールドレンズ"],["オールドレンズの世界","mid","オールドレンズ"],
+    ["オールドレンズ部","mid","オールドレンズ"],["オールドレンズ写真","mid","オールドレンズ"],
+    ["vintagelens","mid","オールドレンズ"],["ぐるぐるボケ","niche","オールドレンズ"],
+    ["バブルボケ","niche","オールドレンズ"],["プロジェクションレンズ","niche","オールドレンズ"],
+    ["プロジェクターレンズ","niche","オールドレンズ"],["projectorlens","niche","オールドレンズ"],
+    ["apollon","niche","オールドレンズ"],["オールドレンズのある生活","niche","オールドレンズ"],
+    ["レンズ沼","niche","オールドレンズ"],["マニュアルフォーカス","niche","オールドレンズ"],
+    // 幻想・世界観(エモ・作風)
+    ["エモい","big","幻想・世界観"],["幻想的な写真","mid","幻想・世界観"],
+    ["世界観のある写真","mid","幻想・世界観"],["物語のある写真","mid","幻想・世界観"],
+    ["ノスタルジー","mid","幻想・世界観"],["儚い写真","mid","幻想・世界観"],
+    ["幻想的な世界","mid","幻想・世界観"],["夢のような世界","niche","幻想・世界観"],
+    ["詩的な写真","niche","幻想・世界観"],["現実と幻想の間","niche","幻想・世界観"],
+    ["静かな写真","niche","幻想・世界観"],["余白のある写真","niche","幻想・世界観"],
+    // ポートレート・被写体
+    ["ポートレート","big","ポートレート・被写体"],["portrait","big","ポートレート・被写体"],
+    ["被写体","big","ポートレート・被写体"],["ポートレート撮影","mid","ポートレート・被写体"],
+    ["portraitphotography","mid","ポートレート・被写体"],["ポトレのセカイ","mid","ポートレート・被写体"],
+    ["ポトレ","mid","ポートレート・被写体"],["被写体さんと繋がりたい","mid","ポートレート・被写体"],
+    ["ポートレートしま専科","niche","ポートレート・被写体"],["白いワンピース","niche","ポートレート・被写体"],
+    ["portrait_shot","niche","ポートレート・被写体"],["被写体さん募集","niche","ポートレート・被写体"],
+    // 自然・花・鹿児島
+    ["桜","big","自然・花・鹿児島"],["鹿児島","big","自然・花・鹿児島"],
+    ["kagoshima","mid","自然・花・鹿児島"],["菜の花","mid","自然・花・鹿児島"],
+    ["桜フォト","mid","自然・花・鹿児島"],["花のある風景","mid","自然・花・鹿児島"],
+    ["森の中","mid","自然・花・鹿児島"],["鹿児島写真部","niche","自然・花・鹿児島"],
+    ["椿","niche","自然・花・鹿児島"],["鹿児島観光","niche","自然・花・鹿児島"],
+    ["九州写真部","niche","自然・花・鹿児島"],["苔むした森","niche","自然・花・鹿児島"],
+    // 掲載・リポスト狙い(メディア/フィーチャー系)
+    ["tokyocameraclub","big","掲載・リポスト狙い"],["igersjp","big","掲載・リポスト狙い"],
+    ["genic_mag","mid","掲載・リポスト狙い"],["nicostop","mid","掲載・リポスト狙い"],
+    ["photo_jpn","mid","掲載・リポスト狙い"],["team_jp_","mid","掲載・リポスト狙い"],
+    ["ig_japan","mid","掲載・リポスト狙い"],["daily_photo_jpn","mid","掲載・リポスト狙い"],
+    ["lovers_nippon","mid","掲載・リポスト狙い"],["indies_gram","mid","掲載・リポスト狙い"],
+    ["pashadelic","niche","掲載・リポスト狙い"],["portrait_perfection","mid","掲載・リポスト狙い"],
+    ["pursuitofportraits","mid","掲載・リポスト狙い"],["hubsplanet","niche","掲載・リポスト狙い"],
+  ]
+};
+const KEY = "hashrotate.v2";
+const SIZE_LABEL = {big:"ビッグ", mid:"ミドル", niche:"ニッチ"};
+const SIZE_ORDER = {big:0, mid:1, niche:2};
+
+function freshState(){
+  return {
+    tags: PRESET.tags.map(([name,size,cat],i)=>({id:i+1, name, size, cat, used:0})),
+    cats: PRESET.cats.slice(),
+    history: [],
+    settings: {count:15, sep:"newline", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1},
+    caption: "",
+    current: null
+  };
+}
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) || freshState(); }
+catch(e){ S = freshState(); }
+if(!S.tags || !S.cats) S = freshState();
+if(S.caption === undefined) S.caption = "";
+if(!S.settings.sepMigrated){ S.settings.sep = "newline"; S.settings.sepMigrated = 1; } // 縦並びを新デフォルトに
+
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- ユーティリティ ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+function esc(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand("copy"); }catch(_){}
+    ta.remove(); return ok;
+  }
+}
+function fmt(tags){ return tags.map(t=>"#"+t).join(S.settings.sep==="newline" ? "\n" : " "); }
+function fullText(){
+  const cap = (S.caption || "").trim();
+  const tags = fmt(S.current || []);
+  return cap ? cap + "\n\n" + tags : tags;
+}
+
+/* ---------- 生成ロジック ---------- */
+function weightedPick(pool, n, avoid){
+  // avoid: 直前セットのタグ名Set。使用回数が少ないほど・直前に使っていないほど選ばれやすい
+  const picked = [];
+  const cand = pool.slice();
+  while(picked.length < n && cand.length){
+    let total = 0;
+    const ws = cand.map(t=>{
+      let w = 1/(1 + t.used*0.5);
+      if(avoid.has(t.name)) w *= 0.25;
+      total += w; return w;
+    });
+    let r = Math.random()*total, idx = 0;
+    for(let i=0;i<ws.length;i++){ r -= ws[i]; if(r<=0){ idx=i; break; } }
+    picked.push(cand[idx]); cand.splice(idx,1);
+  }
+  return picked;
+}
+function generate(){
+  const active = S.settings.activeCats.length ? S.settings.activeCats : S.cats;
+  const pool = S.tags.filter(t=>active.includes(t.cat));
+  if(pool.length < 3){ toast("タグが足りません。カテゴリを選ぶかタグを追加してください"); return; }
+  const N = Math.min(S.settings.count, pool.length);
+  const prev = new Set([...(S.history[0] ? S.history[0].tags : []), ...(S.current || [])]);
+  const bySize = {big:[], mid:[], niche:[]};
+  pool.forEach(t=>bySize[t.size].push(t));
+  // 配合: ビッグ25% / ニッチ30% / 残りミドル
+  let nBig = Math.min(Math.round(N*0.25), bySize.big.length);
+  let nNiche = Math.min(Math.round(N*0.30), bySize.niche.length);
+  let nMid = Math.min(N - nBig - nNiche, bySize.mid.length);
+  let picked = [
+    ...weightedPick(bySize.big, nBig, prev),
+    ...weightedPick(bySize.mid, nMid, prev),
+    ...weightedPick(bySize.niche, nNiche, prev),
+  ];
+  if(picked.length < N){ // 端数はサイズ問わず補充
+    const names = new Set(picked.map(t=>t.name));
+    picked = picked.concat(weightedPick(pool.filter(t=>!names.has(t.name)), N-picked.length, prev));
+  }
+  shuffle(picked);
+  S.current = picked.map(t=>t.name);
+  save();
+  renderResult();
+  const ov = overlap(S.current, S.history[0] ? S.history[0].tags : []);
+  $("#genStats").innerHTML = `<b>${S.current.length}</b> 個 — 前回との重複 <b>${ov}%</b>`;
+}
+function overlap(a, b){
+  if(!b || !b.length) return 0;
+  const B = new Set(b);
+  return Math.round(a.filter(x=>B.has(x)).length / a.length * 100);
+}
+
+/* ---------- 描画 ---------- */
+function tagByName(name){ return S.tags.find(t=>t.name===name); }
+function renderResult(){
+  const chips = $("#resultChips");
+  if(!S.current || !S.current.length){
+    chips.innerHTML=""; $("#resultText").value="";
+    $("#btnCopy").disabled = $("#btnShuffle").disabled = true; return;
+  }
+  chips.innerHTML = S.current.map(n=>{
+    const t = tagByName(n), size = t ? t.size : "mid";
+    return `<span class="tagchip ${size}"><i class="dot ${size}"></i>#${esc(n)}</span>`;
+  }).join("");
+  $("#resultText").value = fullText();
+  $("#btnCopy").disabled = $("#btnShuffle").disabled = false;
+}
+function renderCatChecks(){
+  $("#catChecks").innerHTML = S.cats.map(c=>
+    `<label><input type="checkbox" value="${esc(c)}" ${S.settings.activeCats.includes(c)?"checked":""}>${esc(c)}</label>`
+  ).join("");
+  $("#catChecks").querySelectorAll("input").forEach(el=>el.addEventListener("change", ()=>{
+    S.settings.activeCats = [...$("#catChecks").querySelectorAll("input:checked")].map(i=>i.value);
+    save();
+  }));
+  $("#addCat").innerHTML = S.cats.map(c=>`<option>${esc(c)}</option>`).join("");
+  $("#filterCats").innerHTML = `<label><input type="radio" name="fc" value="" checked>すべて</label>` +
+    S.cats.map(c=>`<label><input type="radio" name="fc" value="${esc(c)}">${esc(c)}</label>`).join("");
+  $("#filterCats").querySelectorAll("input").forEach(el=>el.addEventListener("change", renderTagList));
+}
+function renderTagList(){
+  const q = $("#q").value.trim().toLowerCase();
+  const fc = ($("#filterCats input:checked")||{}).value || "";
+  const sort = $("#sortBy").value;
+  let list = S.tags.filter(t=>(!fc || t.cat===fc) && (!q || t.name.toLowerCase().includes(q)));
+  if(sort==="name") list.sort((a,b)=>a.name.localeCompare(b.name,"ja"));
+  else if(sort==="size") list.sort((a,b)=>SIZE_ORDER[a.size]-SIZE_ORDER[b.size] || a.name.localeCompare(b.name,"ja"));
+  else list.sort((a,b)=>b.used-a.used);
+  $("#tagCount").textContent = `(${list.length} / ${S.tags.length})`;
+  $("#tagRows").innerHTML = list.map(t=>`<tr>
+    <td style="width:14px"><i class="dot ${t.size}" style="display:inline-block"></i></td>
+    <td class="name">#${esc(t.name)}</td>
+    <td class="meta">${esc(t.cat)} · ${SIZE_LABEL[t.size]} · ${t.used}回</td>
+    <td style="width:28px"><button class="x" data-id="${t.id}" aria-label="削除">×</button></td>
+  </tr>`).join("");
+  $("#tagRows").querySelectorAll("button.x").forEach(b=>b.addEventListener("click", ()=>{
+    S.tags = S.tags.filter(t=>t.id!==Number(b.dataset.id));
+    save(); renderTagList();
+  }));
+}
+function renderHistory(){
+  const el = $("#histList");
+  if(!S.history.length){ el.innerHTML = `<p class="hint">まだ履歴はありません。</p>`; return; }
+  el.innerHTML = S.history.map((h,i)=>`<div class="hist">
+    <div class="when">${esc(h.when)}${i<S.history.length-1?` — 次と重複 ${overlap(h.tags,S.history[i+1].tags)}%`:""}</div>
+    <div class="tags">${h.tags.map(t=>"#"+esc(t)).join(" ")}</div>
+    <button class="btn ghost" data-i="${i}" style="font-size:12.5px;padding:5px 12px">これをコピー</button>
+  </div>`).join("");
+  el.querySelectorAll("button").forEach(b=>b.addEventListener("click", async ()=>{
+    const h = S.history[Number(b.dataset.i)];
+    if(await copyText(fmt(h.tags))) toast("コピーしました");
+  }));
+}
+
+/* ---------- イベント ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click", ()=>{
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
+  document.querySelectorAll("section.panel").forEach(p=>p.classList.toggle("active", p.id==="panel-"+b.dataset.tab));
+  if(b.dataset.tab==="sync") renderHistory();
+  if(b.dataset.tab==="manage") renderTagList();
+}));
+$("#cntRange").value = S.settings.count;
+$("#cntLabel").textContent = S.settings.count;
+$("#caption").value = S.caption;
+$("#cntRange").addEventListener("input", e=>{
+  S.settings.count = Number(e.target.value);
+  $("#cntLabel").textContent = e.target.value; save();
+});
+document.querySelectorAll('input[name=sep]').forEach(el=>{
+  el.checked = el.value===S.settings.sep;
+  el.addEventListener("change", ()=>{ S.settings.sep = el.value; save(); renderResult(); });
+});
+$("#btnGenerate").addEventListener("click", generate);
+$("#btnShuffle").addEventListener("click", ()=>{ shuffle(S.current); save(); renderResult(); });
+$("#caption").addEventListener("input", e=>{
+  S.caption = e.target.value; save();
+  if(S.current && S.current.length) $("#resultText").value = fullText();
+});
+$("#btnCopy").addEventListener("click", async ()=>{
+  if(!S.current) return;
+  if(!(await copyText(fullText()))){ toast("コピーできませんでした"); return; }
+  // コピー = 採用とみなして履歴と使用回数を更新
+  S.current.forEach(n=>{ const t=tagByName(n); if(t) t.used++; });
+  const d = new Date();
+  const when = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  if(!S.history[0] || S.history[0].tags.join()!==S.current.join()){
+    S.history.unshift({when, tags:S.current.slice()});
+    S.history = S.history.slice(0,20);
+  }
+  save(); toast("本文+タグをコピーしました。Instagramに貼り付けてください");
+});
+$("#btnAdd").addEventListener("click", ()=>{
+  const raw = $("#addName").value.trim();
+  if(!raw) return;
+  const names = raw.split(/[\s,、]+/).map(s=>s.replace(/^#/,"")).filter(Boolean);
+  let added = 0;
+  names.forEach(name=>{
+    if(S.tags.some(t=>t.name===name)) return;
+    S.tags.push({id:S.settings.nextId++, name, size:$("#addSize").value, cat:$("#addCat").value, used:0});
+    added++;
+  });
+  $("#addName").value="";
+  save(); renderTagList();
+  toast(added ? `${added} 個追加しました` : "すでに登録済みです");
+});
+$("#btnAddCat").addEventListener("click", ()=>{
+  const c = $("#newCat").value.trim();
+  if(!c || S.cats.includes(c)) return;
+  S.cats.push(c); $("#newCat").value="";
+  save(); renderCatChecks(); toast("カテゴリを追加しました");
+});
+$("#q").addEventListener("input", renderTagList);
+$("#sortBy").addEventListener("change", renderTagList);
+$("#btnExport").addEventListener("click", async ()=>{
+  const data = JSON.stringify(S);
+  $("#ioArea").value = data;
+  toast((await copyText(data)) ? "データをコピーしました。別端末で貼り付けて取り込んでください" : "コピー失敗。テキスト欄から手動でコピーしてください");
+});
+$("#btnImport").addEventListener("click", ()=>{
+  try{
+    const d = JSON.parse($("#ioArea").value);
+    if(!d.tags || !d.cats) throw 0;
+    if(d.caption === undefined) d.caption = "";
+    S = d; save();
+    renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+    $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
+    $("#caption").value = S.caption;
+    toast("取り込みました");
+  }catch(e){ toast("取り込めませんでした。書き出したテキストをそのまま貼り付けてください"); }
+});
+$("#btnReset").addEventListener("click", ()=>{
+  if(!confirm("登録タグ・履歴をすべて消して初期データに戻します。よろしいですか?")) return;
+  S = freshState(); save();
+  renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+  $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
+  $("#caption").value = S.caption;
+  toast("初期データに戻しました");
+});
+
+/* ---------- 初期描画 ---------- */
+renderCatChecks(); renderTagList(); renderResult(); renderHistory();
+</script>
+</body>
+</html>
