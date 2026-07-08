@@ -1,30 +1,12 @@
-// gemini.js — Gemini 画像生成 API（人物素材の生成）
-// APIキーは localStorage にのみ保存し、Google の API 以外へは送信しない。
+// gemini.js — Google Gemini 画像生成プロバイダー
+// providers.js から利用される。APIキーの保存/読込は providers.js 側で行う。
 
 const MODEL = 'gemini-2.5-flash-image';
 const ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-const KEY_STORAGE = 'sceneComposer.geminiApiKey';
 
-export function getApiKey() {
-  try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; }
-}
-
-export function setApiKey(key) {
-  try {
-    if (key) localStorage.setItem(KEY_STORAGE, key.trim());
-    else localStorage.removeItem(KEY_STORAGE);
-  } catch { /* プライベートモード等では保存できないが動作は継続 */ }
-}
-
-// プリセット（UIの選択肢）
-export const PRESETS = [
-  { label: '白ワンピの女性（後ろ姿）', prompt: '白いロングワンピースを着た若い女性が立っている後ろ姿。長い黒髪。' },
-  { label: '白ワンピの女性（横向き）', prompt: '白いロングワンピースを着た若い女性が横を向いて立っている。長い黒髪。' },
-  { label: '白ワンピ＋透明の傘', prompt: '白いロングワンピースを着た若い女性が透明のビニール傘をさして立っている。' },
-  { label: '麦わら帽子の子ども', prompt: '麦わら帽子をかぶった小さな子どもが立っている後ろ姿。' },
-];
-
+// Gemini は透過画像を直接返せないため、緑背景で生成させてブラウザ側で
+// クロマキー処理する（transparentOutput: false）。
 function buildPrompt(userPrompt) {
   return (
     `写実的な写真。${userPrompt.trim()} ` +
@@ -37,9 +19,7 @@ function buildPrompt(userPrompt) {
   );
 }
 
-// 人物画像を生成して data URL を返す。
-export async function generatePerson(apiKey, userPrompt) {
-  if (!apiKey) throw new Error('APIキーが設定されていません。設定画面から入力してください。');
+async function generate(apiKey, userPrompt) {
   let res;
   try {
     res = await fetch(ENDPOINT, {
@@ -97,3 +77,16 @@ async function describeError(res) {
       return `生成に失敗しました（HTTP ${res.status}）。${detail}`;
   }
 }
+
+export const gemini = {
+  id: 'gemini',
+  label: 'Google Gemini',
+  // 生成画像は緑背景 → クロマキーで透過化が必要
+  transparentOutput: false,
+  keyPlaceholder: 'AIza...',
+  keyHelpUrl: 'https://aistudio.google.com/apikey',
+  keyHelpLabel: 'Google AI Studio',
+  // 旧バージョンの保存キーがあれば引き継ぐ
+  legacyKeyStorage: 'sceneComposer.geminiApiKey',
+  generate,
+};

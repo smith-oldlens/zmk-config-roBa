@@ -1,13 +1,18 @@
 // app.js — Scene Composer メインロジック
 import * as C from './compositor.js';
-import * as G from './gemini.js';
+import * as P from './providers.js';
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage');
 
 const PREVIEW_MAX = 2048;       // 編集中プレビューの最大長辺
 const DEFAULT_HEIGHT_RATIO = 0.18; // 配置時の人物の高さ（背景高さ比）
+const MIN_HEIGHT_RATIO = 0.03;  // 人物の高さの下限（背景高さ比）
+const MAX_HEIGHT_RATIO = 0.9;   // 人物の高さの上限（背景高さ比）
 const UNDO_MAX = 10;
+// 書き出し解像度の上限（端末のCanvas制限で真っ黒/失敗になるのを防ぐ）
+const MAX_EXPORT_AREA = 16777216; // 約16.7Mpx（iOS Safari の安全圏）
+const MAX_EXPORT_DIM = 8192;
 
 const state = {
   bgFile: null,     // 元ファイル（書き出し時にフル解像度で再デコード）
@@ -104,6 +109,14 @@ function render() {
   }
 }
 
+// ドラッグ/ピンチ/スライダー中は毎イベント描画せず、1フレームに1回へ間引く
+let renderPending = false;
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => { renderPending = false; render(); });
+}
+
 // 配置先周辺の背景統計に合わせて色調マッチ済みキャンバスを作り直す
 function refreshMatch(layer) {
   const src = state.sources.get(layer.srcId);
@@ -186,6 +199,7 @@ function placeLayer(srcId, p) {
 
 function select(id) {
   state.selectedId = id;
+  sliderBefore = null; // 選択が変わったらスライダーの途中スナップショットは破棄
   if (id) { syncSheet(); showSheet(); } else { hideSheet(); }
   render();
 }
@@ -229,8 +243,8 @@ function hitTest(p) {
 }
 
 const pointers = new Map();
-let drag = null;   // { id, dx, dy, moved, before }
-let pinch = null;  // { id, startDist, startH, before }
+let drag = null;   // { pointerId, id, dx, dy, moved, before }
+let pinch = null;  // { id, startDist, startH, moved, before }
 
 stage.addEventListener('pointerdown', (e) => {
   if (!state.bgPreview) return;
@@ -238,16 +252,25 @@ stage.addEventListener('pointerdown', (e) => {
   stage.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  if (pointers.size === 2 && selectedLayer()) {
-    const [p1, p2] = [...pointers.values()];
-    pinch = {
-      id: state.selectedId,
-      startDist: Math.hypot(p1.x - p2.x, p1.y - p2.y),
-      startH: selectedLayer().h,
-      before: drag?.before ?? snapshot(),
-    };
-    drag = null;
-    return;
+  // 2本目の指が乗ったらピンチ開始。まだ何も選択されていなければ、
+  // どちらかの指の位置にあるレイヤーを掴んでからピンチする（掴み損ね対策）。
+  if (pointers.size === 2 && !state.placingSrcId) {
+    if (!selectedLayer()) {
+      const hit = hitTest(eventPos(e));
+      if (hit) select(hit.id);
+    }
+    if (selectedLayer()) {
+      const [p1, p2] = [...pointers.values()];
+      pinch = {
+        id: state.selectedId,
+        startDist: Math.hypot(p1.x - p2.x, p1.y - p2.y),
+        startH: selectedLayer().h,
+        moved: false,
+        before: drag?.before ?? snapshot(),
+      };
+      drag = null;
+      return;
+    }
   }
 
   const p = eventPos(e);
@@ -258,7 +281,7 @@ stage.addEventListener('pointerdown', (e) => {
   const hit = hitTest(p);
   if (hit) {
     if (state.selectedId !== hit.id) select(hit.id);
-    drag = { id: hit.id, dx: hit.x - p.x, dy: hit.y - p.y, moved: false, before: snapshot() };
+    drag = { pointerId: e.pointerId, id: hit.id, dx: hit.x - p.x, dy: hit.y - p.y, moved: false, before: snapshot() };
   } else {
     select(null);
   }
@@ -274,21 +297,23 @@ stage.addEventListener('pointermove', (e) => {
     const layer = state.layers.find((l) => l.id === pinch.id);
     if (layer && pinch.startDist > 0) {
       layer.h = clamp(pinch.startH * (d / pinch.startDist),
-        state.bgFullH * 0.02, state.bgFullH * 0.9);
+        state.bgFullH * MIN_HEIGHT_RATIO, state.bgFullH * MAX_HEIGHT_RATIO);
+      pinch.moved = true;
       syncSheet();
-      render();
+      scheduleRender();
     }
     return;
   }
 
-  if (drag) {
+  // ドラッグは開始した指だけが動かす（マルチタッチでの暴れを防ぐ）
+  if (drag && e.pointerId === drag.pointerId) {
     const p = eventPos(e);
     const layer = state.layers.find((l) => l.id === drag.id);
     if (layer) {
       layer.x = clamp(p.x + drag.dx, 0, state.bgFullW);
       layer.y = clamp(p.y + drag.dy, 0, state.bgFullH);
       drag.moved = true;
-      render();
+      scheduleRender();
     }
   }
 });
@@ -296,20 +321,22 @@ stage.addEventListener('pointermove', (e) => {
 function endPointer(e) {
   pointers.delete(e.pointerId);
   if (pinch && pointers.size < 2) {
-    const layer = state.layers.find((l) => l.id === pinch.id);
-    if (layer) refreshMatch(layer);
-    pushUndo(pinch.before);
+    if (pinch.moved) {
+      const layer = state.layers.find((l) => l.id === pinch.id);
+      if (layer) refreshMatch(layer);
+      pushUndo(pinch.before);
+    }
     pinch = null;
     render();
   }
-  if (drag && pointers.size === 0) {
+  if (drag && (e.pointerId === drag.pointerId || pointers.size === 0)) {
     if (drag.moved) {
       const layer = state.layers.find((l) => l.id === drag.id);
       if (layer) refreshMatch(layer);
       pushUndo(drag.before);
-      render();
     }
     drag = null;
+    render();
   }
 }
 stage.addEventListener('pointerup', endPointer);
@@ -344,16 +371,24 @@ function bindSlider(id, apply, needsMatch = false) {
     if (!l) return;
     if (sliderBefore === null) sliderBefore = snapshot();
     apply(l, parseFloat(el.value));
-    render();
+    scheduleRender();
   });
   el.addEventListener('change', () => {
+    // change 前にレイヤーが消えても sliderBefore は必ずクリアする
+    // （残すと次の別レイヤー操作で古いスナップショットが Undo に積まれる）
+    const before = sliderBefore;
+    sliderBefore = null;
     const l = selectedLayer();
     if (!l) return;
     if (needsMatch) refreshMatch(l);
-    if (sliderBefore !== null) { pushUndo(sliderBefore); sliderBefore = null; }
+    if (before !== null) pushUndo(before);
     render();
   });
 }
+
+// スライダーの範囲は定数から設定（ピンチ側のクランプ値と食い違わないように一元化）
+$('sizeSlider').min = MIN_HEIGHT_RATIO;
+$('sizeSlider').max = MAX_HEIGHT_RATIO;
 
 bindSlider('sizeSlider', (l, v) => { l.h = state.bgFullH * v; }, true);
 bindSlider('matchSlider', (l, v) => { l.colorMatch = v; }, true);
@@ -423,9 +458,13 @@ async function loadSourceFromLibrary(rec) {
   addSource(rec.id, canvas);
 }
 
+let libUrls = []; // 前回のライブラリ描画で作った object URL（再描画時に解放する）
+
 async function renderLibrary() {
   const grid = $('libGrid');
   grid.textContent = '';
+  libUrls.forEach((u) => URL.revokeObjectURL(u));
+  libUrls = [];
   let recs = [];
   try { recs = await dbAll(); } catch { /* IndexedDB 不可の環境 */ }
   recs.sort((a, b) => b.createdAt - a.createdAt);
@@ -434,7 +473,9 @@ async function renderLibrary() {
     const item = document.createElement('div');
     item.className = 'lib-item';
     const img = document.createElement('img');
-    img.src = URL.createObjectURL(rec.blob);
+    const url = URL.createObjectURL(rec.blob);
+    libUrls.push(url);
+    img.src = url;
     img.alt = rec.prompt || '人物';
     item.appendChild(img);
     const del = document.createElement('button');
@@ -474,15 +515,16 @@ function startPlacing(srcId) {
 // 人物生成モーダル
 // ---------------------------------------------------------------------------
 
-let genRaw = null;    // 生成された元画像（緑背景）
+let genRaw = null;    // 生成された元画像
 let genKeyed = null;  // 透過処理後
 let genKeyColor = null; // null = 緑背景アルゴリズム
 let genPrompt = '';
+let genTransparent = false; // プロバイダーが透過PNGを直接返したか
 let eyedropping = false;
 
 function initPresets() {
   const wrap = $('presetChips');
-  for (const p of G.PRESETS) {
+  for (const p of P.PRESETS) {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = p.label;
@@ -495,9 +537,9 @@ function initPresets() {
 }
 
 async function runGenerate() {
-  const apiKey = G.getApiKey();
-  if (!apiKey) {
-    toast('先に Gemini APIキーを設定してください');
+  const provider = P.getProvider();
+  if (!P.getApiKey(provider.id)) {
+    toast(`先に ${provider.label} のAPIキーを設定してください`);
     openModal('settingsModal');
     return;
   }
@@ -514,7 +556,7 @@ async function runGenerate() {
   status.textContent = '生成中…（数秒〜十数秒かかります）';
   $('genResult').hidden = true;
   try {
-    const dataUrl = await G.generatePerson(apiKey, prompt);
+    const dataUrl = await P.generatePerson(prompt);
     const img = new Image();
     await new Promise((res, rej) => {
       img.onload = res;
@@ -525,6 +567,9 @@ async function runGenerate() {
     genRaw.getContext('2d').drawImage(img, 0, 0);
     genKeyColor = null;
     genPrompt = prompt;
+    genTransparent = !!provider.transparentOutput;
+    // 透過PNGを直接返すプロバイダーではクロマキー調整UIは不要
+    $('keyTools').hidden = genTransparent;
     $('keyToleranceSlider').value = 60;
     applyKeying();
     $('genResult').hidden = false;
@@ -541,10 +586,15 @@ async function runGenerate() {
 
 function applyKeying() {
   if (!genRaw) return;
-  const tol = parseFloat($('keyToleranceSlider').value);
-  genKeyed = genKeyColor
-    ? C.keyByColor(genRaw, genKeyColor, tol, 40)
-    : C.chromaKeyGreen(genRaw, { low: tol * 0.2, high: tol });
+  if (genTransparent) {
+    // 既に透過済み。そのまま使う。
+    genKeyed = C.canvasFrom(genRaw);
+  } else {
+    const tol = parseFloat($('keyToleranceSlider').value);
+    genKeyed = genKeyColor
+      ? C.keyByColor(genRaw, genKeyColor, tol, 40)
+      : C.chromaKeyGreen(genRaw, { low: tol * 0.2, high: tol });
+  }
   const pv = $('genPreview');
   pv.width = genKeyed.width;
   pv.height = genKeyed.height;
@@ -604,22 +654,45 @@ $('rawPreview').addEventListener('click', (e) => {
 // 書き出し
 // ---------------------------------------------------------------------------
 
-async function renderFull() {
-  let bmp;
+async function decodeBackground() {
   try {
-    bmp = await createImageBitmap(state.bgFile, { imageOrientation: 'from-image' });
+    return await createImageBitmap(state.bgFile, { imageOrientation: 'from-image' });
   } catch {
-    bmp = await createImageBitmap(state.bgFile);
+    return createImageBitmap(state.bgFile);
   }
-  const cv = C.createCanvas(bmp.width, bmp.height);
+}
+
+// フル解像度で合成。端末のCanvas制限を超えそうなら安全な範囲へ縮小する。
+// 戻り値: { cv, scaled }（scaled=true なら元解像度から縮小された）
+async function renderFull() {
+  const bmp = await decodeBackground();
+  let s = 1;
+  const area = bmp.width * bmp.height;
+  if (area > MAX_EXPORT_AREA) s = Math.sqrt(MAX_EXPORT_AREA / area);
+  const longEdge = Math.max(bmp.width, bmp.height) * s;
+  if (longEdge > MAX_EXPORT_DIM) s *= MAX_EXPORT_DIM / longEdge;
+
+  const W = Math.max(1, Math.round(bmp.width * s));
+  const H = Math.max(1, Math.round(bmp.height * s));
+  const cv = C.createCanvas(W, H);
   const ctx = cv.getContext('2d');
-  ctx.drawImage(bmp, 0, 0);
+  ctx.drawImage(bmp, 0, 0, W, H);
   bmp.close?.();
   for (const layer of state.layers) {
     const { person, sil } = resolveLayer(layer);
-    C.drawLayer(ctx, layer, person, sil, 1);
+    C.drawLayer(ctx, layer, person, sil, s);
   }
-  return cv;
+  return { cv, scaled: s < 0.999 };
+}
+
+// 書き出し用の Blob を用意（保存・共有で共通）
+async function prepareBlob(type) {
+  const { cv, scaled } = await renderFull();
+  const mime = type === 'png' ? 'image/png' : 'image/jpeg';
+  const ext = type === 'png' ? 'png' : 'jpg';
+  const blob = await new Promise((r) => cv.toBlob(r, mime, 0.92));
+  if (!blob) throw new Error('書き出しに失敗しました（画像が大きすぎる可能性があります）。');
+  return { blob, name: `scene-${timestamp()}.${ext}`, w: cv.width, h: cv.height, scaled };
 }
 
 async function exportImage(type) {
@@ -628,17 +701,15 @@ async function exportImage(type) {
   status.classList.remove('error');
   status.textContent = '書き出し中…';
   try {
-    const cv = await renderFull();
-    const mime = type === 'png' ? 'image/png' : 'image/jpeg';
-    const blob = await new Promise((r) => cv.toBlob(r, mime, 0.92));
-    if (!blob) throw new Error('書き出しに失敗しました');
-    const name = `scene-${timestamp()}.${type === 'png' ? 'png' : 'jpg'}`;
+    const { blob, name, w, h, scaled } = await prepareBlob(type);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 30000);
-    status.textContent = `保存しました（${cv.width}×${cv.height}）`;
+    status.textContent = scaled
+      ? `保存しました（端末制限のため ${w}×${h} に縮小）`
+      : `保存しました（${w}×${h}）`;
   } catch (err) {
     status.textContent = err.message || String(err);
     status.classList.add('error');
@@ -651,17 +722,16 @@ async function shareImage() {
   status.classList.remove('error');
   status.textContent = '準備中…';
   try {
-    const cv = await renderFull();
-    const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.92));
-    const file = new File([blob], `scene-${timestamp()}.jpg`, { type: 'image/jpeg' });
+    const { blob, name } = await prepareBlob('jpeg');
+    const file = new File([blob], name, { type: 'image/jpeg' });
     await navigator.share({ files: [file] });
     status.hidden = true;
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      status.textContent = '共有できませんでした';
-      status.classList.add('error');
-    } else {
+    if (err.name === 'AbortError') {
       status.hidden = true;
+    } else {
+      status.textContent = '共有できませんでした。「JPEGで保存」をお試しください。';
+      status.classList.add('error');
     }
   }
 }
@@ -706,12 +776,14 @@ $('bgInput').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-const stageWrap = $('stageWrap');
-stageWrap.addEventListener('dragover', (e) => e.preventDefault());
-stageWrap.addEventListener('drop', (e) => {
+// ウィンドウ全体でドロップの既定動作（ファイルへ画面遷移）を止める。
+// これがないと、UIのどこか（ツールバーやモーダル上など）に画像を落とした瞬間に
+// ブラウザがそのファイルを開いてしまい、編集中のセッションが丸ごと失われる。
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => {
   e.preventDefault();
-  const f = e.dataTransfer.files?.[0];
-  if (f) loadBackground(f);
+  const f = e.dataTransfer?.files?.[0];
+  if (f && f.type.startsWith('image/')) loadBackground(f);
 });
 
 $('genBtn').addEventListener('click', () => {
@@ -723,23 +795,49 @@ $('libBtn').addEventListener('click', () => {
   openModal('libModal');
 });
 $('exportBtn').addEventListener('click', () => {
-  if (!state.layers.length) toast('まだ人物が配置されていません');
+  if (!state.layers.length) { toast('まだ人物が配置されていません'); return; }
   $('exportStatus').hidden = true;
   openModal('exportModal');
 });
 $('undoBtn').addEventListener('click', undo);
 
+// --- 設定モーダル（プロバイダー選択 + APIキー） ---
+function initProviderSelect() {
+  const sel = $('providerSelect');
+  for (const p of P.PROVIDERS) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => syncSettingsForProvider(sel.value));
+}
+
+function syncSettingsForProvider(id) {
+  const provider = P.getProvider(id);
+  $('apiKeyInput').value = P.getApiKey(id);
+  $('apiKeyInput').placeholder = provider.keyPlaceholder || '';
+  $('apiKeyLabel').childNodes[0].nodeValue = `${provider.label} のAPIキー`;
+  $('keyHelp').innerHTML =
+    `キーは <a href="${provider.keyHelpUrl}" target="_blank" rel="noopener">${provider.keyHelpLabel}</a> で取得できます。`;
+}
+
 $('settingsBtn').addEventListener('click', () => {
-  $('apiKeyInput').value = G.getApiKey();
+  const id = P.getProviderId();
+  $('providerSelect').value = id;
+  syncSettingsForProvider(id);
   openModal('settingsModal');
 });
 $('saveKeyBtn').addEventListener('click', () => {
-  G.setApiKey($('apiKeyInput').value);
+  const id = $('providerSelect').value;
+  P.setProviderId(id);
+  P.setApiKey(id, $('apiKeyInput').value);
   closeModal('settingsModal');
-  toast('APIキーを保存しました');
+  toast('設定を保存しました');
 });
 $('clearKeyBtn').addEventListener('click', () => {
-  G.setApiKey('');
+  const id = $('providerSelect').value;
+  P.setApiKey(id, '');
   $('apiKeyInput').value = '';
   toast('APIキーを削除しました');
 });
@@ -751,6 +849,7 @@ try {
 } catch { /* 非対応 */ }
 
 initPresets();
+initProviderSelect();
 
 // テストから内部状態を確認できるように公開（本番動作には影響しない）
 window.__scene = { state, render, refreshMatch, loadBackground };

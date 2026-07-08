@@ -80,7 +80,7 @@ export function trimAlpha(canvas, threshold = 8) {
       }
     }
   }
-  if (maxX < 0) return canvas; // 全部透明
+  if (maxX < 0) return createCanvas(1, 1); // 全部透明 → 空の 1x1 を返す（呼び出し側が空と判定できる）
   const cw = maxX - minX + 1, ch = maxY - minY + 1;
   const out = createCanvas(cw, ch);
   out.getContext('2d').drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
@@ -244,10 +244,12 @@ export function drawLayer(ctx, layer, person, sil, k) {
   ctx.save();
   ctx.translate(fx, fy);
   if (layer.flipped) ctx.scale(-1, 1);
-  // 縮小率が大きいときは背景のボケ感に合わせて軽くぼかす
-  const ratio = w / person.width;
-  const blur = ratio < 0.5 ? Math.min(1.2, (0.5 - ratio) * 2) : 0;
-  withBlur(ctx, blur, () => ctx.drawImage(person, -w / 2, -h, w, h));
+  // 縮小率が大きいときは背景のボケ感に合わせて軽くぼかす。
+  // 判定は k に依存しない scale（layer.h / person.height）で行い、
+  // 実際のぼかし量だけ k を掛ける。こうするとプレビュー（k<1）と
+  // 書き出し（k=1）でぼけ具合が一致する（WYSIWYG）。
+  const blurNative = scale < 0.5 ? Math.min(1.2, (0.5 - scale) * 2) : 0;
+  withBlur(ctx, blurNative * k, () => ctx.drawImage(person, -w / 2, -h, w, h));
   ctx.restore();
 }
 

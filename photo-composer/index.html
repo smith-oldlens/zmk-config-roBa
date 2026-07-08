@@ -38,7 +38,7 @@
 <div id="adjustSheet" class="sheet" hidden>
   <div class="sheet-handle"></div>
   <label>大きさ
-    <input type="range" id="sizeSlider" min="0.03" max="0.6" step="0.005">
+    <input type="range" id="sizeSlider" step="0.005">
   </label>
   <label>色なじみ
     <input type="range" id="matchSlider" min="0" max="1" step="0.05">
@@ -108,12 +108,15 @@
 <div id="settingsModal" class="modal" hidden>
   <div class="modal-box">
     <h2>設定</h2>
-    <label class="field">Gemini APIキー
-      <input type="password" id="apiKeyInput" placeholder="AIza...">
+    <label class="field">画像生成サービス
+      <select id="providerSelect"></select>
     </label>
+    <label class="field" id="apiKeyLabel">APIキー
+      <input type="password" id="apiKeyInput" placeholder="">
+    </label>
+    <p class="hint-text" id="keyHelp"></p>
     <p class="hint-text">
-      キーはこの端末（ブラウザ）内にのみ保存され、Google の API への送信以外には使われません。<br>
-      キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料で取得できます。
+      キーはこの端末（ブラウザ）内にのみ保存され、選んだサービスの API への送信以外には使われません。
     </p>
     <div class="modal-actions">
       <button id="saveKeyBtn" class="primary">保存</button>
