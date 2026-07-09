@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Keep the classic layout on Android 15: without this opt-out, the
+         edge-to-edge enforcement draws the activity under the status bar. -->
+    <style name="Theme.AdBlock" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>
