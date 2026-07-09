@@ -18,8 +18,9 @@ def test_wrap_short_text_unchanged():
 
 
 def test_wrap_prefers_punctuation():
+    # フォールバック(句読点ベース)の挙動を検証するため BudouX は使わない
     text = "今日はキーボードの話をします、それでは始めましょう"
-    lines = wrap_japanese(text, 15)
+    lines = wrap_japanese(text, 15, use_budoux=False)
     assert lines[0].endswith("、")
     assert all(len(line) <= 15 for line in lines)
 

@@ -29,6 +29,7 @@ class App:
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
         self.do_silence = tk.BooleanVar(value=True)
+        self.use_vad = tk.BooleanVar(value=False)
         self.do_subtitles = tk.BooleanVar(value=True)
         self.do_fillers = tk.BooleanVar(value=True)
         self.cut_fillers = tk.BooleanVar(value=False)
@@ -83,6 +84,9 @@ class App:
         ttk.Checkbutton(feat, text="無音部分の自動カット", variable=self.do_silence).grid(
             row=0, column=0, sticky="w", padx=8, pady=2
         )
+        ttk.Checkbutton(
+            feat, text="VADで精密カット (咳払い・環境音を除去)", variable=self.use_vad
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=8, pady=2)
         ttk.Checkbutton(feat, text="字幕生成 (SRT)", variable=self.do_subtitles).grid(
             row=0, column=1, sticky="w", padx=8, pady=2
         )
@@ -329,6 +333,7 @@ class App:
 
         options = AnalyzeOptions(
             do_silence=self.do_silence.get(),
+            use_vad=self.use_vad.get(),
             do_subtitles=self.do_subtitles.get(),
             do_fillers=self.do_fillers.get() or self.cut_fillers.get(),
             do_scenes=self.do_scenes.get(),

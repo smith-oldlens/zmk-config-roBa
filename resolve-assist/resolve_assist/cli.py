@@ -42,6 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "fcp=Final Cut Pro, premiere=Premiere Pro, all=全部")
 
     p.add_argument("--no-silence", action="store_true", help="無音カットを行わない")
+    p.add_argument("--vad", action="store_true",
+                   help="無音検出に Silero VAD を使う (咳払い・環境音を除去。要 [vad])")
     p.add_argument("--subtitles", action="store_true", help="字幕 (SRT) を生成する")
     p.add_argument("--fillers", action="store_true", help="フィラー語を検出する")
     p.add_argument("--cut-fillers", action="store_true",
@@ -159,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
 
     options = AnalyzeOptions(
         do_silence=not args.no_silence,
+        use_vad=args.vad,
         do_subtitles=args.subtitles,
         do_fillers=args.fillers,
         do_scenes=args.scenes,

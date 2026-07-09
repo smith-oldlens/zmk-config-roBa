@@ -35,6 +35,10 @@ class AnalyzeOptions:
     do_scenes: bool = False
     cut_fillers: bool = False       # フィラーを自動カットに含める(既定はマーカーのみ)
 
+    # 無音カットの検出方式: False=ffmpeg silencedetect (音量ベース),
+    # True=Silero VAD (人の声かどうかで判定。咳払い・環境音に強い。要 [vad])
+    use_vad: bool = False
+
     # 各処理のパラメータ
     silence: silence.SilenceOptions = field(default_factory=silence.SilenceOptions)
     whisper_model: str = "small"
@@ -99,15 +103,31 @@ def analyze(
     out_dir.mkdir(parents=True, exist_ok=True)
     result = AnalyzeResult(info=info, output_dir=out_dir)
 
-    # --- 無音検出 → 発話区間 ---
+    # --- 無音検出 / VAD → 発話区間 ---
     if opts.do_silence:
         if not info.has_audio:
             raise RuntimeError("音声トラックがないため無音検出できません。")
-        emit(f"無音検出中 (しきい値 {opts.silence.noise_db} dB, "
-             f"最小無音 {opts.silence.min_silence} 秒)...")
-        result.segments = silence.detect_speech_segments(
-            video_path, info.duration, opts.silence
-        )
+        if opts.use_vad:
+            from .analysis.vad import VadOptions, detect_speech_segments_vad
+
+            emit("発話区間を検出中 (Silero VAD / 咳払い・環境音を除去)...")
+            result.segments = detect_speech_segments_vad(
+                video_path,
+                info.duration,
+                VadOptions(
+                    min_silence=opts.silence.min_silence,
+                    pad_before=opts.silence.pad_before,
+                    pad_after=opts.silence.pad_after,
+                    min_clip=opts.silence.min_clip,
+                    merge_gap=opts.silence.merge_gap,
+                ),
+            )
+        else:
+            emit(f"無音検出中 (しきい値 {opts.silence.noise_db} dB, "
+                 f"最小無音 {opts.silence.min_silence} 秒)...")
+            result.segments = silence.detect_speech_segments(
+                video_path, info.duration, opts.silence
+            )
         kept = sum(s.duration for s in result.segments)
         emit(f"  発話区間 {len(result.segments)} 個 / "
              f"残り {kept:.1f} 秒 (元の {info.duration:.1f} 秒から "

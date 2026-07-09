@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resolve-assist"
-version = "0.3.0"
+version = "0.4.0"
 description = "動画編集補助ツール (Resolve/FCP/Premiere): 無音カット・フィラー検出・シーン検出・字幕生成"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,9 +16,17 @@ dependencies = []
 transcribe = ["faster-whisper>=1.0"]
 # シーン検出を使う場合
 scenes = ["scenedetect[opencv]>=0.6"]
-# 全部入り
-full = ["faster-whisper>=1.0", "scenedetect[opencv]>=0.6"]
-dev = ["pytest>=7"]
+# 字幕の自然な改行 (BudouX, Apache-2.0)
+subtitles = ["budoux>=0.6"]
+# 精密な発話区間検出 (Silero VAD, MIT)。torch を含むため大きい
+vad = ["silero-vad>=5.1"]
+# 全部入り (VAD は torch を含むため full には入れない)
+full = [
+    "faster-whisper>=1.0",
+    "scenedetect[opencv]>=0.6",
+    "budoux>=0.6",
+]
+dev = ["pytest>=7", "budoux>=0.6"]
 
 [project.scripts]
 resolve-assist = "resolve_assist.cli:main"

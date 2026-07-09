@@ -5,14 +5,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ..jp_text import wrap_japanese
 from ..types import TranscriptSegment
 
 _SRT_TIME_RE = re.compile(
     r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)"
 )
 
-# 行を折り返しやすい文字(この直後で改行する)
-_BREAK_AFTER = "、。!?!?…とがはをにでへもね"
+# wrap_japanese は jp_text へ移動 (BudouX 対応)。後方互換のため re-export する。
+__all__ = [
+    "wrap_japanese",
+    "format_srt",
+    "parse_srt",
+    "write_srt",
+    "split_segment_for_subtitles",
+]
 
 
 def _format_timestamp(sec: float) -> str:
@@ -23,30 +30,6 @@ def _format_timestamp(sec: float) -> str:
     m, ms = divmod(ms, 60_000)
     s, ms = divmod(ms, 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-
-def wrap_japanese(text: str, max_chars: int) -> list[str]:
-    """日本語テキストを最大 max_chars 文字で行に折り返す。
-
-    可能なら句読点・助詞の直後で折る。
-    """
-    text = text.strip()
-    lines: list[str] = []
-    while len(text) > max_chars:
-        window = text[: max_chars + 1]
-        break_at = -1
-        # 後ろから折り返し候補を探す(先頭付近で折ると不格好なので 1/3 以降)
-        for i in range(len(window) - 1, max(1, max_chars // 3), -1):
-            if window[i - 1] in _BREAK_AFTER:
-                break_at = i
-                break
-        if break_at <= 0:
-            break_at = max_chars
-        lines.append(text[:break_at].strip())
-        text = text[break_at:].strip()
-    if text:
-        lines.append(text)
-    return lines
 
 
 def split_segment_for_subtitles(

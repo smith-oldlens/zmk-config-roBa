@@ -3,9 +3,12 @@
 トーク系動画の編集を時短するためのツールです。動画を解析して、以下を自動化します。
 
 - **無音部分の自動カット** — 無音区間を検出し、発話部分だけを並べたタイムラインを生成
+- **VADによる精密カット** — Silero VAD で「人の声かどうか」を判定し、咳払い・ブレス・
+  環境音を除去(音量ベースより高精度。オプション)
 - **フィラー語の検出** — 「えー」「あの」「えっと」等を検出し、カット候補としてマーカー表示(オプションで自動カット)
 - **シーン検出** — 映像の切り替わりにマーカーを配置
 - **字幕生成** — Whisper によるローカル文字起こし → 日本語向けに整形した SRT を生成
+  (BudouX による文節を崩さない自然な改行に対応)
 - **お手本スタイル学習** — 既成の動画から編集の型(カットテンポ・字幕体裁・構成・音量感)を
   プロファイル化し、新しい動画に自動適用
 
@@ -36,8 +39,10 @@ brew install ffmpeg python@3.12
 
 ```bash
 cd resolve-assist
-pip3 install -e '.[full]'      # 全機能 (Whisper文字起こし + シーン検出)
+pip3 install -e '.[full]'      # 全機能 (Whisper文字起こし + シーン検出 + BudouX改行)
 # 最小構成 (無音カットのみ) なら: pip3 install -e .
+# VAD (咳払い・環境音の除去) も使うなら: pip3 install -e '.[full,vad]'
+#   ※ vad は torch を含むためダウンロードが大きめです
 ```
 
 ### 3. Resolve 内スクリプトのインストール (Resolve を使う場合のみ)
@@ -95,6 +100,9 @@ resolve-assist analyze talk.mp4 --target all      # 3ソフト分すべて
 
 # 無音カット + 字幕 + フィラー検出
 resolve-assist analyze talk.mp4 --subtitles --fillers
+
+# VAD で精密カット (咳払い・ブレス・環境音を除去)
+resolve-assist analyze talk.mp4 --vad
 
 # フィラーも自動カットに含める / 高精度モデルを使う
 resolve-assist analyze talk.mp4 --subtitles --cut-fillers --model medium
@@ -181,3 +189,15 @@ GUI では「お手本から学習...」ボタンで同じことができます(
 pip3 install -e '.[dev]'
 pytest tests/
 ```
+
+## 使用しているオープンソース
+
+本ツールは以下の OSS ライブラリを利用しています(いずれもオフラインで動作)。
+
+| ライブラリ | 用途 | ライセンス |
+|---|---|---|
+| [ffmpeg](https://ffmpeg.org/) | 音声抽出・無音検出・ラウドネス計測 | LGPL/GPL |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | ローカル文字起こし | MIT |
+| [BudouX](https://github.com/google/budoux) | 字幕の自然な改行 | Apache-2.0 |
+| [Silero VAD](https://github.com/snakers4/silero-vad) | 発話区間検出(咳払い・環境音の除去) | MIT |
+| [PySceneDetect](https://github.com/Breakthrough/PySceneDetect) | シーン検出 | BSD-3-Clause |

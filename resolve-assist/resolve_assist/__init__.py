@@ -4,7 +4,7 @@
 取り込めるファイル (cuts.json / EDL / FCPXML / FCP7 XML / SRT) を出力する。
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 # Resolve 内スクリプトと GUI が最新の解析結果を受け渡すためのポインタファイル
 LATEST_POINTER_DIR = ".resolve_assist"
