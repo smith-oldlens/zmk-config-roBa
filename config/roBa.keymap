@@ -64,6 +64,14 @@
             bindings = <&to 0 &macro_param_1to1 &kp MACRO_PLACEHOLDER>;
             label = "TO_LAYER_0";
         };
+        __: __ {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            wait-ms = <10>;
+            tap-ms = <10>;
+            bindings = <&kp LG(RIGHT)>;
+            label = "__";
+        };
     };
 
     behaviors {
@@ -82,7 +90,7 @@
 
         default_layer {
             bindings = <
-                &lt 6 Q  &kp W  &kp E  &kp R  &kp T  &kp Y  &kp U  &lt 5 I  &kp O  &lt 5 P  &mt TAB A  &kp S  &kp D  &kp F  &kp G  &kp LG(C)  &kp EXCLAMATION  &kp H  &kp J  &kp K  &kp L  &lt 5 MINUS  &mt LEFT_SHIFT Z  &kp X  &kp C  &kp V  &kp B  &kp LG(V)  &kp QUESTION  &kp N  &kp M  &kp COMMA  &kp DOT  &lt 4 HASH  &kp LCTRL  &kp LEFT_WIN  &kp LEFT_ALT  &mt LCMD LANGUAGE_2  &lt_to_layer_0 3 SPACE  &lt_to_layer_0 1 LANG1  &lt 2 ENTER  &kp BACKSPACE  &kp RG(C)
+                &lt 6 Q  &kp W  &kp E  &kp R  &kp T  &kp Y  &kp U  &lt 5 I  &kp O  &lt 5 P  &mt LCTRL A  &kp S  &kp D  &kp F  &kp G  &kp LG(C)  &lt 6 EXCLAMATION  &kp H  &kp J  &kp K  &kp L  &lt 5 MINUS  &mt LEFT_SHIFT Z  &kp X  &kp C  &kp V  &kp B  &kp LG(V)  &kp QUESTION  &kp N  &kp M  &kp COMMA  &kp DOT  &lt 4 HASH  &kp LCTRL  &kp LEFT_ALT  &kp LGUI  &mt LCMD LANGUAGE_2  &lt_to_layer_0 3 SPACE  &lt_to_layer_0 1 LANG1  &kp BACKSPACE  &lt 2 ENTER  &kp RG(C)
             >;
             sensor-bindings = <&inc_dec_kp PG_UP PAGE_DOWN>;
         };
@@ -108,7 +116,7 @@
 
         MOUSE {
             bindings = <
-                &trans  &trans  &trans  &trans  &trans  &kp C_FF  &kp PAGE_UP  &kp PAGE_DOWN  &trans  &trans  &trans  &kp LC(LEFT)  &kp LC(UP_ARROW)  &kp LC(RIGHT)  &trans  &trans  &trans  &kp C_AC_BACK  &mkp MB1  &mkp MB2  &mkp MB2  &mo 5  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans  &kp LG(RIGHT)  &kp PAGE_UP  &kp PAGE_DOWN  &trans  &trans  &trans  &kp LC(LEFT)  &kp LC(UP_ARROW)  &kp LC(RIGHT)  &trans  &trans  &trans  &kp C_AC_BACK  &mkp MB1  &mkp MB2  &mkp MB2  &mo 5  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
             >;
         };
 
