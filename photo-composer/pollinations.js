@@ -32,6 +32,8 @@ async function generate(_apiKey, userPrompt, seed) {
     nologo: 'true',
     model: 'flux',
     seed: String(seed ?? Math.floor(Math.random() * 1e9)),
+    // Webアプリを識別させる推奨パラメータ（キーは埋め込まない）
+    referrer: 'scene-composer',
   });
   const url = ENDPOINT + encodeURIComponent(buildPrompt(userPrompt)) + '?' + params;
 

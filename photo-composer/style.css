@@ -255,6 +255,32 @@ a { color: var(--accent); }
 .status { font-size: 13px; color: var(--muted); margin-top: 10px; }
 .status.error { color: var(--danger); }
 
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.or-divider::before, .or-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #3a3f4a;
+}
+#importBtn {
+  width: 100%;
+  border: 1px solid #3a3f4a;
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+#importBtn:active { background: var(--panel-2); }
+
 .preview-wrap {
   margin-top: 12px;
   border-radius: var(--radius);

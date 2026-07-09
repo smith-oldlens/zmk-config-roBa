@@ -69,6 +69,11 @@
     <button id="runGenBtn" class="primary">✨ 生成する</button>
     <p id="genStatus" class="status" hidden></p>
 
+    <div class="or-divider"><span>または</span></div>
+    <button id="importBtn">🖼 手持ちの画像を取り込む（無料・APIキー不要）</button>
+    <p class="hint-text">切り抜き済みの透過PNGはそのまま使えます。背景つきの写真は下の「切り抜きの調整」で背景色をスポイト指定して抜けます。</p>
+    <input type="file" id="importInput" accept="image/*" hidden>
+
     <div id="genResult" hidden>
       <div class="preview-wrap checker">
         <canvas id="genPreview"></canvas>

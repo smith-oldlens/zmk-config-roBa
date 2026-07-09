@@ -584,6 +584,44 @@ async function runGenerate() {
   }
 }
 
+// キャンバスに透明ピクセルが含まれるか（取り込んだ画像が切り抜き済みかの判定）
+function hasTransparency(canvas) {
+  const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+  return false;
+}
+
+// 手持ちの画像ファイルを取り込む（API不要・完全無料の経路）
+async function importPersonImage(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    toast('画像ファイルを選んでください');
+    return;
+  }
+  let bmp;
+  try {
+    bmp = await createImageBitmap(file);
+  } catch {
+    toast('この画像は読み込めませんでした');
+    return;
+  }
+  genRaw = C.canvasFrom(bmp);
+  bmp.close?.();
+  genPrompt = file.name.replace(/\.[^.]+$/, '') || '取り込み画像';
+  genKeyColor = null;
+  // 透過PNGならそのまま使う。背景つき写真ならクロマキー/スポイトで抜く。
+  genTransparent = hasTransparency(genRaw);
+  $('keyTools').hidden = genTransparent;
+  $('keyToleranceSlider').value = 60;
+  applyKeying();
+  $('genResult').hidden = false;
+  $('rawWrap').hidden = true;
+  $('eyedropHint').hidden = true;
+  $('genStatus').hidden = true;
+  if (!genTransparent) {
+    toast('背景を抜くには「切り抜きの調整」→「背景色を選び直す」で背景をタップ');
+  }
+}
+
 function applyKeying() {
   if (!genRaw) return;
   if (genTransparent) {
@@ -618,6 +656,11 @@ function placeGenerated() {
 }
 
 $('runGenBtn').addEventListener('click', runGenerate);
+$('importBtn').addEventListener('click', () => $('importInput').click());
+$('importInput').addEventListener('change', (e) => {
+  if (e.target.files[0]) importPersonImage(e.target.files[0]);
+  e.target.value = '';
+});
 $('placeGenBtn').addEventListener('click', placeGenerated);
 $('discardGenBtn').addEventListener('click', () => {
   genRaw = genKeyed = null;
