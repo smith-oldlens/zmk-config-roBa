@@ -1,0 +1,101 @@
+name: Test and release AdBlock APK
+
+on:
+  push:
+    paths:
+      - "android-adblock/**"
+      - ".github/workflows/android-adblock.yml"
+  pull_request:
+    paths:
+      - "android-adblock/**"
+      - ".github/workflows/android-adblock.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Run tests and build debug APK
+        working-directory: android-adblock
+        run: gradle --no-daemon testDebugUnitTest assembleDebug
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android-adblock/release-key.jks
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.1.${{ github.run_number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Restore release signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+
+      - name: Build signed release APK
+        working-directory: android-adblock
+        run: gradle --no-daemon clean testDebugUnitTest assembleRelease
+
+      - name: Verify and package APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android-adblock/app/build/outputs/apk/release/app-release.apk dist/roba-adblock.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$APKSIGNER" verify --verbose --print-certs dist/roba-adblock.apk
+          shasum -a 256 dist/roba-adblock.apk > dist/roba-adblock.apk.sha256
+
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${VERSION_NAME}" \
+            dist/roba-adblock.apk \
+            dist/roba-adblock.apk.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "roBa AdBlock v${VERSION_NAME}" \
+            --notes "固定署名された正式版です。未ブロックのDNS問い合わせは暗号化してCloudflareへ送信し、障害時はGoogle Public DNSへ切り替えます。" \
+            --latest
