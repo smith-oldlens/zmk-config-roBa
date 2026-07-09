@@ -2,12 +2,14 @@
 // app.js はこのモジュール経由でのみ生成バックエンドを扱う。
 // 新しいプロバイダーを追加するときは、gemini.js/openai.js と同じ形の
 // プロバイダーオブジェクトを作って PROVIDERS に足すだけでよい。
+import { pollinations } from './pollinations.js';
 import { gemini } from './gemini.js';
 // OpenAI (gpt-image-1) は実装済みだが、組織の本人確認・課金設定が
 // 済むまで一旦無効化している。有効化するには下の2行のコメントを外すだけでよい。
 // import { openai } from './openai.js';
 
-export const PROVIDERS = [gemini/*, openai */];
+// 先頭がデフォルト。Pollinations はキー不要・無料なので最初に置く。
+export const PROVIDERS = [pollinations, gemini/*, openai */];
 
 const PROVIDER_STORAGE = 'sceneComposer.provider';
 const keyStorageOf = (id) => `sceneComposer.apiKey.${id}`;
@@ -31,6 +33,7 @@ export function getProvider(id = getProviderId()) {
 }
 
 export function getApiKey(id = getProviderId()) {
+  if (getProvider(id).noApiKey) return '';
   const key = safeGet(keyStorageOf(id));
   if (key) return key;
   // 旧バージョンの保存キーからの移行
@@ -45,6 +48,7 @@ export function setApiKey(id, key) {
 // 現在のプロバイダーで人物画像を生成し、data URL を返す。
 export async function generatePerson(userPrompt) {
   const provider = getProvider();
+  if (provider.noApiKey) return provider.generate(null, userPrompt);
   const apiKey = getApiKey(provider.id);
   if (!apiKey) throw new Error('APIキーが設定されていません。設定画面から入力してください。');
   return provider.generate(apiKey, userPrompt);

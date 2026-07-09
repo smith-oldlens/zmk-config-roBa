@@ -3,35 +3,38 @@
 森や桜並木などの風景写真の「指定した場所」に、白ワンピースの女の子などの人物を
 小さく入れ込んだ作品写真を作れる、スマホ対応のWebアプリです。
 
-- 人物は **画像生成AI**（あなたのAPIキー）で作ります。現在は **Google Gemini** のみ有効です
-  （OpenAI対応はコードに実装済みですが、組織確認・課金設定が済むまで一旦無効化しています。
-  再度有効にする方法は下記「対応している画像生成サービス」を参照）
+- 人物は **画像生成AI** で作ります。**デフォルトは Pollinations（無料・APIキー不要）** なので、
+  何も設定せずにそのまま生成できます。より高品質にしたい場合は Google Gemini（要APIキー・有料枠）も選べます
 - 切り抜き・配置・色なじませ・影付け・書き出しは **すべてブラウザ内** で処理します
   （写真がサーバーにアップロードされることはありません）
 - ビルド不要の静的サイト（HTML/CSS/JSのみ）
 
 ## 対応している画像生成サービス
 
-| サービス | モデル | キー取得先 | 特徴 | 状態 |
+| サービス | モデル | キー | 費用 | 状態 |
 |---|---|---|---|---|
-| Google Gemini | `gemini-2.5-flash-image` | [Google AI Studio](https://aistudio.google.com/apikey) | 緑背景で生成し、ブラウザ内でクロマキー透過。**画像生成は有料枠（お支払い設定の有効化）が必要**（無料枠は画像生成の枠が0） | ✅ 有効 |
-| OpenAI | `gpt-image-1` | [OpenAI ダッシュボード](https://platform.openai.com/api-keys) | 透過PNGを直接生成するため切り抜き不要・輪郭がきれい。従量課金＋組織の本人確認が必要 | 実装済み・**一旦無効** |
+| **Pollinations** | Flux | **不要** | **無料** | ✅ 有効（既定） |
+| Google Gemini | `gemini-2.5-flash-image` | [AI Studio](https://aistudio.google.com/apikey) で取得 | 有料枠（お支払い設定）が必要※ | ✅ 有効 |
+| OpenAI | `gpt-image-1` | [OpenAI](https://platform.openai.com/api-keys) で取得 | 従量課金＋組織の本人確認が必要 | 実装済み・**一旦無効** |
 
-OpenAIを有効化するには `photo-composer/providers.js` の以下の2箇所のコメントを外すだけです：
+- Pollinations と Gemini は緑背景で生成し、ブラウザ内でクロマキー透過します
+- ※ 2025年12月以降、Gemini の無料枠では画像生成の枠が0のため、無料のままだと `429` エラーになります
+- OpenAI を有効化するには `photo-composer/providers.js` の以下2箇所のコメントを外すだけです：
 
 ```js
-import { openai } from './openai.js';       // ← コメントを外す
-export const PROVIDERS = [gemini, openai];  // ← openai を含める
+import { openai } from './openai.js';                      // ← コメントを外す
+export const PROVIDERS = [pollinations, gemini, openai];   // ← openai を含める
 ```
 
-新しいサービスを足したいときも、`gemini.js` / `openai.js` と同じ形の
+新しいサービスを足したいときも、`pollinations.js` / `gemini.js` と同じ形の
 プロバイダーオブジェクトを作って `providers.js` の `PROVIDERS` に追加するだけです。
+（`noApiKey: true` を付ければキー不要サービスとして扱われます）
 
 ## 使い方
 
-1. **APIキーを設定**（初回のみ）
-   - アプリ右上の ⚙ から [Google AI Studio](https://aistudio.google.com/apikey) で取得したキーを貼り付けて保存（端末内にのみ保存されます）
-   - ⚠️ **画像生成には有料枠（お支払い設定）の有効化が必要です。** 2025年12月以降、Gemini の無料枠では画像を生成できません（`429` エラーになります）。AI Studio でキーのプロジェクトの「お支払い情報」を有効化してください（1枚あたり数円程度の従量課金）
+1. **（そのままでOK）** 既定の **Pollinations は APIキー不要・無料** なので、いきなり手順2へ進めます
+   - より高品質にしたい場合のみ、⚙設定で「Google Gemini」を選んでAPIキーを入力
+   （Geminiは画像生成に有料枠（お支払い設定）の有効化が必要。無料枠だと `429` になります）
 2. **風景写真を選ぶ**（ファイル選択 or ドラッグ＆ドロップ）
 3. **✨人物を生成** — プリセット（「白ワンピの女性（後ろ姿）」など）を選ぶか、
    自由に説明を入力して生成。緑背景で生成された人物が自動で切り抜かれます。
@@ -83,7 +86,7 @@ python3 -m http.server 8000
 | `style.css` | スマホファーストのスタイル |
 | `app.js` | 状態管理・タップ配置・ドラッグ/ピンチ・Undo・IndexedDBライブラリ・書き出し |
 | `providers.js` | 画像生成プロバイダーの登録・切り替え・APIキー管理 |
-| `gemini.js` / `openai.js` | 各サービスの生成API呼び出し（プロバイダー実装） |
+| `pollinations.js` / `gemini.js` / `openai.js` | 各サービスの生成API呼び出し（プロバイダー実装） |
 | `compositor.js` | クロマキー透過・色調マッチ（簡易color transfer）・影の描画・合成 |
 
 - Gemini は「均一な緑背景（#00FF00）」指定で生成し、ブラウザ内でクロマキー処理して透過化。

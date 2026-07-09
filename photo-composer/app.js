@@ -538,7 +538,7 @@ function initPresets() {
 
 async function runGenerate() {
   const provider = P.getProvider();
-  if (!P.getApiKey(provider.id)) {
+  if (!provider.noApiKey && !P.getApiKey(provider.id)) {
     toast(`先に ${provider.label} のAPIキーを設定してください`);
     openModal('settingsModal');
     return;
@@ -815,11 +815,19 @@ function initProviderSelect() {
 
 function syncSettingsForProvider(id) {
   const provider = P.getProvider(id);
-  $('apiKeyInput').value = P.getApiKey(id);
-  $('apiKeyInput').placeholder = provider.keyPlaceholder || '';
-  $('apiKeyLabel').childNodes[0].nodeValue = `${provider.label} のAPIキー`;
-  $('keyHelp').innerHTML =
-    `キーは <a href="${provider.keyHelpUrl}" target="_blank" rel="noopener">${provider.keyHelpLabel}</a> で取得できます。`;
+  const keyless = !!provider.noApiKey;
+  // キー不要のサービスではAPIキー欄・削除ボタンを隠す
+  $('apiKeyLabel').hidden = keyless;
+  $('clearKeyBtn').hidden = keyless;
+  if (keyless) {
+    $('keyHelp').innerHTML = 'このサービスは <b>APIキー不要・無料</b> で使えます。そのまま「人物を生成」できます。';
+  } else {
+    $('apiKeyInput').value = P.getApiKey(id);
+    $('apiKeyInput').placeholder = provider.keyPlaceholder || '';
+    $('apiKeyLabel').childNodes[0].nodeValue = `${provider.label} のAPIキー`;
+    $('keyHelp').innerHTML =
+      `キーは <a href="${provider.keyHelpUrl}" target="_blank" rel="noopener">${provider.keyHelpLabel}</a> で取得できます。`;
+  }
 }
 
 $('settingsBtn').addEventListener('click', () => {
@@ -831,7 +839,7 @@ $('settingsBtn').addEventListener('click', () => {
 $('saveKeyBtn').addEventListener('click', () => {
   const id = $('providerSelect').value;
   P.setProviderId(id);
-  P.setApiKey(id, $('apiKeyInput').value);
+  if (!P.getProvider(id).noApiKey) P.setApiKey(id, $('apiKeyInput').value);
   closeModal('settingsModal');
   toast('設定を保存しました');
 });
