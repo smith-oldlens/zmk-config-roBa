@@ -84,7 +84,83 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--no-transcribe", action="store_true",
                     help="SRTがない場合でも Whisper 推定を行わない")
     lp.add_argument("--language", default="ja", help="文字起こし言語 (既定 ja)")
+
+    sp = sub.add_parser(
+        "shorts",
+        help="縦型ショート動画 (YouTube Shorts / Instagram Reels) を生成する",
+    )
+    sp.add_argument("video", help="元の動画ファイル")
+    sp.add_argument("-o", "--output-dir", help="出力先 (既定: <動画名>_shorts/)")
+    sp.add_argument("--count", type=int, default=3,
+                    help="自動提案するハイライト数 (既定 3)")
+    sp.add_argument("--max-duration", type=float, default=60.0,
+                    help="1本の上限尺 秒 (Shorts=60, Reels=90。既定 60)")
+    sp.add_argument("--min-duration", type=float, default=10.0,
+                    help="これ未満のハイライト候補は捨てる 秒 (既定 10)")
+    sp.add_argument("--range", action="append", dest="ranges", metavar="開始-終了",
+                    help="区間を手動指定 (例: 2:15-3:10)。複数指定可。指定時は自動提案しない")
+    sp.add_argument("--fit", choices=["blur", "crop"], default="blur",
+                    help="縦型変換: blur=ぼかし背景 (既定) / crop=中央クロップ")
+    sp.add_argument("--no-burn", action="store_true",
+                    help="字幕を焼き込まない (SRT は別途出力される)")
+    sp.add_argument("--font", default="Hiragino Sans",
+                    help="焼き込み字幕のフォント名 (既定 Hiragino Sans)")
+    sp.add_argument("--subtitle-chars", type=int, default=13,
+                    help="焼き込み字幕の1行最大文字数 (既定 13)")
+    sp.add_argument("--model", default="small", help="Whisper モデル (既定 small)")
+    sp.add_argument("--language", default="ja", help="文字起こし言語 (既定 ja)")
+    sp.add_argument("--silence-db", type=float, default=-35.0,
+                    help="無音判定しきい値 dB (既定 -35)")
     return parser
+
+
+def parse_time(value: str) -> float:
+    """'95' / '1:35' / '0:01:35' を秒に変換する。"""
+    parts = value.strip().split(":")
+    if not all(p.replace(".", "", 1).isdigit() for p in parts) or len(parts) > 3:
+        raise ValueError(f"時刻の形式が不正です: {value}")
+    sec = 0.0
+    for p in parts:
+        sec = sec * 60 + float(p)
+    return sec
+
+
+def parse_range(value: str) -> tuple[float, float]:
+    """'2:15-3:10' を (135.0, 190.0) に変換する。"""
+    if "-" not in value:
+        raise ValueError(f"範囲は 開始-終了 の形式で指定してください: {value}")
+    a, b = value.split("-", 1)
+    start, end = parse_time(a), parse_time(b)
+    if end <= start:
+        raise ValueError(f"終了時刻が開始時刻より前です: {value}")
+    return start, end
+
+
+def _run_shorts(args) -> int:
+    from .analysis.silence import SilenceOptions as SilOpts
+    from .shorts import ShortsOptions, make_shorts
+
+    try:
+        ranges = [parse_range(r) for r in args.ranges] if args.ranges else None
+        options = ShortsOptions(
+            count=args.count,
+            max_duration=args.max_duration,
+            min_duration=args.min_duration,
+            fit=args.fit,
+            burn_subtitles=not args.no_burn,
+            ranges=ranges,
+            font=args.font,
+            subtitle_max_chars=args.subtitle_chars,
+            silence=SilOpts(noise_db=args.silence_db),
+            whisper_model=args.model,
+            language=args.language,
+            output_dir=args.output_dir,
+        )
+        make_shorts(args.video, options, log=print)
+    except Exception as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def _run_learn(args) -> int:
@@ -130,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "learn":
         return _run_learn(args)
+    if args.command == "shorts":
+        return _run_shorts(args)
     if args.command != "analyze":
         return 2
 

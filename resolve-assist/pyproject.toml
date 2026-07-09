@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resolve-assist"
-version = "0.4.0"
+version = "0.5.0"
 description = "動画編集補助ツール (Resolve/FCP/Premiere): 無音カット・フィラー検出・シーン検出・字幕生成"
 readme = "README.md"
 requires-python = ">=3.10"
