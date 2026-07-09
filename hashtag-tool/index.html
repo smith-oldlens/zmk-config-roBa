@@ -184,6 +184,17 @@ button.btn:disabled{opacity:.4; cursor:default; transform:none}
 .legend span{display:inline-flex; align-items:center; gap:6px}
 .stats{font-size:12.5px; color:var(--muted); margin:0 0 6px}
 .stats b{color:var(--ink); font-variant-numeric:tabular-nums}
+.credit{border:1px dashed var(--line2); border-radius:12px; padding:14px 14px 4px; margin:0 0 14px}
+.chips-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+.chips-row .pick{
+  display:inline-flex; align-items:center; gap:5px; cursor:pointer;
+  border:1px solid var(--line2); background:var(--surface2); color:var(--ink);
+  border-radius:999px; padding:4px 6px 4px 11px; font-size:12.5px; font-family:inherit;
+}
+.chips-row .pick:hover{border-color:var(--accent)}
+.chips-row .pick .rm{border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:0 2px}
+.chips-row .pick .rm:hover{color:var(--danger)}
+.chips-row .empty{font-size:11.5px; color:var(--muted)}
 .preview-head{display:flex; align-items:baseline; justify-content:space-between; margin:6px 0 5px}
 .actions{display:flex; gap:8px; margin-top:12px}
 .actions .btn{flex:1}
@@ -294,6 +305,23 @@ input[type=color]{
       <div class="field">
         <label for="caption">キャプション(本文)</label>
         <textarea id="caption" placeholder="投稿の本文をここに入力…" style="min-height:80px"></textarea>
+      </div>
+      <div class="credit">
+        <div class="field">
+          <label for="mentions">メンション(モデル・共同制作)</label>
+          <input type="text" id="mentions" placeholder="例: @shiiii_aka @ironiiss(@は省略可)">
+          <div class="chips-row" id="mentionChips"></div>
+        </div>
+        <div class="field">
+          <label for="camera">使用カメラ</label>
+          <input type="text" id="camera" placeholder="例: α7R">
+          <div class="chips-row" id="cameraChips"></div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="lens">レンズ</label>
+          <input type="text" id="lens" placeholder="例: Apollon 36mm">
+          <div class="chips-row" id="lensChips"></div>
+        </div>
       </div>
       <div class="legend">
         <span><i class="dot big"></i>ビッグ(投稿数 多)</span>
@@ -507,6 +535,8 @@ function freshState(){
     settings: {count:15, sep:"newline", activeCats:["基本","オールドレンズ","幻想・世界観","ポートレート・被写体"], nextId: PRESET.tags.length+1,
                accent:null, bgOpacity:22, bgBlur:3, hasBg:false},
     caption: "",
+    credit: {camera:"", lens:"", mentions:""},
+    creditSaved: {cameras:[], lenses:[], mentions:[]},
     current: null
   };
 }
@@ -520,6 +550,8 @@ if(S.settings.accent === undefined) S.settings.accent = null;
 if(S.settings.bgOpacity === undefined) S.settings.bgOpacity = 22;
 if(S.settings.bgBlur === undefined) S.settings.bgBlur = 3;
 if(S.settings.hasBg === undefined) S.settings.hasBg = false;
+if(!S.credit) S.credit = {camera:"", lens:"", mentions:""};
+if(!S.creditSaved) S.creditSaved = {cameras:[], lenses:[], mentions:[]};
 
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
@@ -553,10 +585,16 @@ async function copyText(text){
   }
 }
 function fmt(tags){ return tags.map(t=>"#"+t).join(S.settings.sep==="newline" ? "\n" : " "); }
+function mentionTokens(){
+  return (S.credit.mentions||"").split(/[\s,、]+/).filter(Boolean).map(m=>m.replace(/^@+/,""));
+}
+function mentionText(){ const t=mentionTokens(); return t.length ? t.map(m=>"@"+m).join(" ") : ""; }
+function gearText(){ const c=(S.credit.camera||"").trim(), l=(S.credit.lens||"").trim(); return [c,l].filter(Boolean).join(" + "); }
 function fullText(){
   const cap = (S.caption || "").trim();
+  const credit = [mentionText(), gearText()].filter(Boolean).join("\n");
   const tags = fmt(S.current || []);
-  return cap ? cap + "\n\n" + tags : tags;
+  return [cap, credit, tags].filter(Boolean).join("\n\n");
 }
 
 /* ---------- テーマカラー ---------- */
@@ -769,6 +807,36 @@ function renderDesign(){
   $("#bgBlur").value = S.settings.bgBlur; $("#bgBlurLabel").textContent = S.settings.bgBlur + "px";
 }
 
+function renderCredit(){
+  $("#camera").value = S.credit.camera || "";
+  $("#lens").value = S.credit.lens || "";
+  $("#mentions").value = S.credit.mentions || "";
+  const chipRow = (elId, list, mode) => {
+    const el = $(elId);
+    if(!list.length){ el.innerHTML = `<span class="empty">よく使うものはコピー時に自動で記憶されます</span>`; return; }
+    el.innerHTML = list.map(v=>`<span class="pick"><button type="button" class="fill" data-v="${esc(v)}">${esc(mode==="mention"?"@"+v:v)}</button><button type="button" class="rm" data-v="${esc(v)}" aria-label="記憶から削除">×</button></span>`).join("");
+    el.querySelectorAll(".fill").forEach(b=>b.addEventListener("click", ()=>{
+      const v = b.dataset.v;
+      if(mode==="mention"){ const cur=mentionTokens(); if(!cur.includes(v)){ cur.push(v); S.credit.mentions = cur.map(x=>"@"+x).join(" "); } }
+      else if(mode==="camera"){ S.credit.camera = v; }
+      else { S.credit.lens = v; }
+      save(); renderCredit(); if(S.current && S.current.length) $("#resultText").value = fullText();
+    }));
+    el.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
+      const i=list.indexOf(b.dataset.v); if(i>=0) list.splice(i,1); save(); renderCredit();
+    }));
+  };
+  chipRow("#mentionChips", S.creditSaved.mentions, "mention");
+  chipRow("#cameraChips", S.creditSaved.cameras, "camera");
+  chipRow("#lensChips", S.creditSaved.lenses, "lens");
+}
+function rememberCredit(){
+  const push = (arr,val) => { val=(val||"").trim(); if(!val) return; const i=arr.indexOf(val); if(i>=0) arr.splice(i,1); arr.unshift(val); if(arr.length>8) arr.length=8; };
+  push(S.creditSaved.cameras, S.credit.camera);
+  push(S.creditSaved.lenses, S.credit.lens);
+  mentionTokens().forEach(m=>push(S.creditSaved.mentions, m));
+}
+
 /* ---------- イベント ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click", ()=>{
   document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b));
@@ -829,6 +897,12 @@ $("#caption").addEventListener("input", e=>{
   S.caption = e.target.value; save();
   if(S.current && S.current.length) $("#resultText").value = fullText();
 });
+["camera","lens","mentions"].forEach(id=>{
+  $("#"+id).addEventListener("input", e=>{
+    S.credit[id] = e.target.value; save();
+    if(S.current && S.current.length) $("#resultText").value = fullText();
+  });
+});
 $("#btnCopy").addEventListener("click", async ()=>{
   if(!S.current) return;
   if(!(await copyText(fullText()))){ toast("コピーできませんでした"); return; }
@@ -840,6 +914,7 @@ $("#btnCopy").addEventListener("click", async ()=>{
     S.history.unshift({when, tags:S.current.slice()});
     S.history = S.history.slice(0,20);
   }
+  rememberCredit(); renderCredit();
   save(); toast("本文+タグをコピーしました。Instagramに貼り付けてください");
 });
 $("#btnAdd").addEventListener("click", ()=>{
@@ -878,8 +953,10 @@ $("#btnImport").addEventListener("click", ()=>{
     if(d.settings.bgOpacity === undefined) d.settings.bgOpacity = 22;
     if(d.settings.bgBlur === undefined) d.settings.bgBlur = 3;
     d.settings.hasBg = !!bgData && d.settings.hasBg; // 背景写真は端末ごと(取り込み対象外)
+    if(!d.credit) d.credit = {camera:"", lens:"", mentions:""};
+    if(!d.creditSaved) d.creditSaved = {cameras:[], lenses:[], mentions:[]};
     S = d; save();
-    renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+    renderCatChecks(); renderTagList(); renderHistory(); renderResult(); renderCredit();
     $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
     $("#caption").value = S.caption;
     applyAccent(); applyBg();
@@ -890,7 +967,7 @@ $("#btnReset").addEventListener("click", ()=>{
   if(!confirm("登録タグ・履歴・デザイン設定をすべて消して初期状態に戻します。よろしいですか?")) return;
   S = freshState(); save();
   bgData = null; saveBg();
-  renderCatChecks(); renderTagList(); renderHistory(); renderResult();
+  renderCatChecks(); renderTagList(); renderHistory(); renderResult(); renderCredit();
   $("#cntRange").value = S.settings.count; $("#cntLabel").textContent = S.settings.count;
   $("#caption").value = S.caption;
   applyAccent(); applyBg();
@@ -899,7 +976,7 @@ $("#btnReset").addEventListener("click", ()=>{
 
 /* ---------- 初期描画 ---------- */
 applyAccent(); applyBg();
-renderCatChecks(); renderTagList(); renderResult(); renderHistory();
+renderCatChecks(); renderTagList(); renderResult(); renderHistory(); renderCredit();
 </script>
 </body>
 </html>
