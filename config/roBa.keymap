@@ -11,20 +11,7 @@
 &trackball {
     automouse-layer = <4>;
     scroll-layers = <5>;
-
-    // ジェスチャー: レイヤー7(Iキー長押し)中にトラックボールを倒すと macOS 操作スペース系を発火
-    // bindingsの順番は 右・左・上・下
-    gesture {
-        layers = <7>;
-        bindings =
-            <&kp LC(RIGHT_ARROW)>,
-            <&kp LC(LEFT_ARROW)>,
-            <&kp LC(UP_ARROW)>,
-            <&kp LC(DOWN_ARROW)>;
-        tick = <30>;
-        wait-ms = <5>;
-        tap-ms = <5>;
-    };
+    // ジェスチャー(ball action)は roBa_R.overlay の trackball@0 内に定義（子ノードはoverlayが正しい置き場所）
 };
 
 / {

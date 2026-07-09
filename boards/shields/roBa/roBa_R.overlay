@@ -1,4 +1,5 @@
 #include "roBa.dtsi"
+#include <dt-bindings/zmk/keys.h>
 
 &default_transform {
     col-offset = <6>;
@@ -57,5 +58,19 @@
         reg = <0>;
         spi-max-frequency = <2000000>;
         irq-gpios = <&gpio0 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+
+        // レイヤー7(Iキー長押し)中にトラックボールを倒すと macOS 操作スペース系を発火
+        // bindingsの順番は 右・左・上・下
+        gesture {
+            layers = <7>;
+            bindings =
+                <&kp LC(RIGHT_ARROW)>,
+                <&kp LC(LEFT_ARROW)>,
+                <&kp LC(UP_ARROW)>,
+                <&kp LC(DOWN_ARROW)>;
+            tick = <25>;
+            wait-ms = <5>;
+            tap-ms = <5>;
+        };
     };
 };
