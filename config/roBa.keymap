@@ -72,15 +72,6 @@
             #binding-cells = <2>;
             tapping-term-ms = <200>;
         };
-        // ジェスチャー用：長押し判定を速く確実に（automouseに割り込まれにくくする）
-        gesture_ht: gesture_ht {
-            compatible = "zmk,behavior-hold-tap";
-            label = "GESTURE_HT";
-            bindings = <&mo>, <&kp>;
-            #binding-cells = <2>;
-            flavor = "hold-preferred";
-            tapping-term-ms = <130>;
-        };
     };
 
     keymap {
@@ -88,7 +79,7 @@
 
         default_layer {
             bindings = <
-                &lt 6 Q  &kp W  &kp E  &kp R  &kp T  &kp Y  &kp U  &gesture_ht 7 I  &kp O  &lt 5 P  &mt LCTRL A  &kp S  &kp D  &kp F  &kp G  &kp LG(C)  &lt 6 EXCLAMATION  &kp H  &kp J  &kp K  &kp L  &lt 5 MINUS  &mt LEFT_SHIFT Z  &kp X  &kp C  &kp V  &kp B  &kp LG(V)  &kp QUESTION  &kp N  &kp M  &kp COMMA  &kp DOT  &lt 4 HASH  &kp LCTRL  &kp LEFT_ALT  &kp LGUI  &mt LCMD LANGUAGE_2  &lt_to_layer_0 3 SPACE  &lt_to_layer_0 1 LANG1  &kp BACKSPACE  &lt 2 ENTER  &kp RG(C)
+                &lt 6 Q  &kp W  &kp E  &kp R  &kp T  &kp Y  &kp U  &lt 5 I  &kp O  &lt 5 P  &mt LCTRL A  &kp S  &kp D  &kp F  &kp G  &kp LG(C)  &lt 6 EXCLAMATION  &kp H  &kp J  &kp K  &kp L  &lt 5 MINUS  &mt LEFT_SHIFT Z  &kp X  &kp C  &kp V  &kp B  &kp LG(V)  &kp QUESTION  &kp N  &kp M  &kp COMMA  &kp DOT  &mo 7  &kp LCTRL  &kp LEFT_ALT  &kp LGUI  &mt LCMD LANGUAGE_2  &lt_to_layer_0 3 SPACE  &lt_to_layer_0 1 LANG1  &kp BACKSPACE  &lt 2 ENTER  &kp RG(C)
             >;
             sensor-bindings = <&inc_dec_kp PG_UP PAGE_DOWN>;
         };
