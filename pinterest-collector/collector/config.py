@@ -24,6 +24,18 @@ DEFAULTS = {
         "gallery": True,
         "gallery_file": "gallery.html",
     },
+    "categories": [],
+    "dedupe": {"enabled": True, "max_distance": 5},
+    "notify": {
+        "email": {
+            "enabled": False,
+            "to": None,
+            "frequency": "daily",
+            "hour": 8,
+            "min_items": 1,
+            "max_images": 5,
+        },
+    },
     "state_file": "./state.json",
     "token_cache_file": "./token_cache.json",
     "feedback_file": "./feedback.json",

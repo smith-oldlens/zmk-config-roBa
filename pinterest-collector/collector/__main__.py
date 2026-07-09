@@ -8,8 +8,9 @@ import sys
 from . import config as config_mod
 from .downloader import download_pin
 from .gallery import generate_gallery
-from .learn import apply_learned_to_prefs, learn_from_feedback, load_learned
+from .learn import apply_learned_to_prefs, learn_from_feedback, load_learned, suggest_keywords
 from .models import Pin
+from .notify import send_digest
 from .oauth import PinterestAuth, run_interactive_setup
 from .scoring import score_pins
 from .sources import fetch_api_pins, fetch_rss_pins
@@ -84,8 +85,9 @@ def collect(cfg: dict, dry_run: bool = False) -> int:
         log.info("  [%.2f] %s %s %s", pin.score, pin.title[:60] or "(no title)", pin.link, pin.score_details)
         if dry_run:
             continue
-        if download_pin(pin, cfg["output"]["download_dir"]):
+        if download_pin(pin, cfg["output"]["download_dir"], state=state, dedupe_cfg=cfg["dedupe"]):
             downloaded += 1
+            state.queue_notify(pin.id)
         if board_id and auth and pin.source == "api":
             save_pin_to_board(auth, pin.id, str(board_id))
         state.mark_seen(pin.id)
@@ -95,11 +97,16 @@ def collect(cfg: dict, dry_run: bool = False) -> int:
         # run doesn't rescore the same rejects forever.
         for pin in fresh:
             state.mark_seen(pin.id)
-        state.save()
         log.info("Downloaded %d images to %s", downloaded, cfg["output"]["download_dir"])
         if cfg["output"].get("gallery", True):
-            count = generate_gallery(cfg["output"]["download_dir"], cfg["output"]["gallery_file"])
+            count = generate_gallery(
+                cfg["output"]["download_dir"],
+                cfg["output"]["gallery_file"],
+                categories_cfg=cfg.get("categories"),
+            )
             log.info("Gallery updated: %s (%d items)", cfg["output"]["gallery_file"], count)
+        send_digest(cfg, state)
+        state.save()
     return 0
 
 
@@ -126,6 +133,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Regenerate the HTML gallery from already-collected images, then exit",
     )
+    parser.add_argument(
+        "--suggest",
+        action="store_true",
+        help="Suggest new like/dislike keyword candidates from collected pins, then exit",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -143,9 +155,16 @@ def main(argv: list[str] | None = None) -> int:
         return learn_from_feedback(cfg)
 
     if args.gallery:
-        count = generate_gallery(cfg["output"]["download_dir"], cfg["output"]["gallery_file"])
+        count = generate_gallery(
+            cfg["output"]["download_dir"],
+            cfg["output"]["gallery_file"],
+            categories_cfg=cfg.get("categories"),
+        )
         log.info("Gallery written: %s (%d items)", cfg["output"]["gallery_file"], count)
         return 0
+
+    if args.suggest:
+        return suggest_keywords(cfg)
 
     return collect(cfg, dry_run=args.dry_run)
 

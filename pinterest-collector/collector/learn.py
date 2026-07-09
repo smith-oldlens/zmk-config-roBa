@@ -183,3 +183,42 @@ def learn_from_feedback(cfg: dict) -> int:
     if dislike_candidates:
         log.info("  disliked terms: %s", ", ".join(t for t, _, _ in dislike_candidates))
     return 0
+
+
+def suggest_keywords(cfg: dict, top_n: int = 20) -> int:
+    """Print the most frequent terms across collected pins that are not yet
+    registered as like/dislike keywords — candidates for config.yaml."""
+    meta = _metadata_by_id(cfg["output"]["download_dir"])
+    if not meta:
+        log.warning("No collected pins found in %s.", cfg["output"]["download_dir"])
+        return 1
+
+    df = Counter()
+    for data in meta.values():
+        toks = _tokens(f"{data.get('title', '')} {data.get('description', '')}")
+        df.update(toks)
+
+    known: set[str] = set()
+    prefs = cfg.get("preferences") or {}
+    for side in ("like_keywords", "dislike_keywords"):
+        for entry in prefs.get(side) or []:
+            word = entry if isinstance(entry, str) else (entry or {}).get("word")
+            if word:
+                known.add(str(word).lower())
+    learned = load_learned(cfg["learned_file"])
+    known |= {w.lower() for w in learned["like_keywords"]}
+    known |= {w.lower() for w in learned["dislike_keywords"]}
+
+    candidates = [(t, n) for t, n in df.most_common() if t not in known][:top_n]
+    if not candidates:
+        log.info("No new keyword candidates found.")
+        return 0
+
+    print(f"キーワード候補 (収集済み {len(meta)} 件中の出現ピン数、登録済みは除外):")
+    for term, count in candidates:
+        print(f"  {count:4d}  {term}")
+    print(
+        "\n気に入った語を config.yaml の preferences.like_keywords / "
+        "dislike_keywords に追加してください。"
+    )
+    return 0

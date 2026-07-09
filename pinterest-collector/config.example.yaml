@@ -57,6 +57,31 @@ output:
   # ギャラリーの出力先(相対パスは download_dir 内に配置)
   gallery_file: "gallery.html"
 
+# ギャラリーのタブ自動振り分け。タイトル+説明文にキーワードが含まれる
+# カテゴリに分類されます(複数該当可)。どれにも該当しないものは「その他」タブへ。
+# config を編集すれば次回のギャラリー生成時に全画像が再分類されます。
+categories:
+  - { name: "風景", keywords: ["landscape", "風景", "山", "海", "空"] }
+  - { name: "イラスト", keywords: ["illustration", "イラスト", "drawing"] }
+  - { name: "水彩", keywords: ["watercolor", "水彩"] }
+  - { name: "写真", keywords: ["photography", "photo", "写真"] }
+
+# 重複画像検出(pHash)。URLやピンIDが違っても同じ画像なら除外します。
+dedupe:
+  enabled: true
+  # ハッシュのハミング距離がこの値以下なら同一画像とみなす(0=完全一致のみ)
+  max_distance: 5
+
+# Gmail通知(要 GMAIL_ADDRESS / GMAIL_APP_PASSWORD 環境変数。README参照)
+notify:
+  email:
+    enabled: false
+    to: null            # 送信先。省略時は GMAIL_ADDRESS 宛
+    frequency: daily    # every_run(毎回) | daily(日次) | weekly(週次)
+    hour: 8             # daily/weekly時: この時刻以降の最初の実行で送信
+    min_items: 1        # 溜まった件数がこれ未満なら次回に持ち越し
+    max_images: 5       # メールに埋め込む画像の上限
+
 # 収集済みピンの記録(重複防止)
 state_file: "./state.json"
 
