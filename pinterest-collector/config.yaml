@@ -1,0 +1,80 @@
+# pinterest-collector 実行設定(GitHub Actions / ローカル共通)
+#
+# GitHub Actions のワークフローはこの config.yaml を優先して使います。
+# 好みに合わせて queries / like_keywords / feeds / categories を編集してください。
+# API を使うには GitHub の Secrets にトークンを登録する必要があります(README 参照)。
+
+sources:
+  # 公式 API v5(キーワード検索)。Secrets 未設定でも自動でスキップされ、RSS だけ動きます。
+  api:
+    enabled: true
+    queries:
+      - "watercolor landscape painting"
+      - "水彩 風景"
+      - "film photography portrait"
+      - "line art illustration"
+    per_query: 25
+
+  # 公開 RSS フィード(APIキー不要)。好きな作家/ボードのフィードに置き換えてください。
+  #   ユーザー全体:  https://www.pinterest.com/<ユーザー名>/feed.rss
+  #   特定のボード:  https://www.pinterest.com/<ユーザー名>/<ボード名>.rss
+  rss:
+    enabled: true
+    feeds:
+      - "https://www.pinterest.com/pinterest/feed.rss"
+
+# 好みの定義。タイトル+説明文にキーワードが含まれると加点/減点されます。
+preferences:
+  like_keywords:
+    - { word: "watercolor", weight: 2.0 }
+    - { word: "水彩", weight: 2.0 }
+    - { word: "landscape", weight: 1.0 }
+    - { word: "illustration", weight: 1.0 }
+    - "風景"
+  dislike_keywords:
+    - { word: "nft", weight: 5.0 }
+    - { word: "ai generated", weight: 3.0 }
+  min_score: 1.0
+
+  # 画像の見た目で判定する CLIP スコアリング(任意。requirements-clip.txt が必要)
+  clip:
+    enabled: false
+    positive_prompts:
+      - "a beautiful watercolor landscape painting"
+    negative_prompts:
+      - "a screenshot of text"
+    weight: 3.0
+
+output:
+  download_dir: "./collected"
+  save_to_board: null      # 自分のボードに自動保存する場合はボードIDを指定(API利用時)
+  max_items_per_run: 30
+  gallery: true
+  gallery_file: "gallery.html"
+
+# ギャラリーのタブ自動振り分け
+categories:
+  - { name: "風景", keywords: ["landscape", "風景", "山", "海", "空"] }
+  - { name: "イラスト", keywords: ["illustration", "イラスト", "drawing", "line art"] }
+  - { name: "水彩", keywords: ["watercolor", "水彩"] }
+  - { name: "写真", keywords: ["photography", "photo", "写真", "film"] }
+
+# 重複画像検出(pHash)
+dedupe:
+  enabled: true
+  max_distance: 5
+
+# Gmail 通知(任意。GMAIL_ADDRESS / GMAIL_APP_PASSWORD を設定すると有効化できます)
+notify:
+  email:
+    enabled: false
+    to: null
+    frequency: daily
+    hour: 8
+    min_items: 1
+    max_images: 5
+
+state_file: "./state.json"
+token_cache_file: "./token_cache.json"
+feedback_file: "./feedback.json"
+learned_file: "./learned.json"

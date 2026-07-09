@@ -1,0 +1,58 @@
+name: Pinterest Collect
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 毎日 08:00 JST (23:00 UTC)
+    - cron: "0 23 * * *"
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pinterest-collector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore seen-pin state and token cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            pinterest-collector/state.json
+            pinterest-collector/token_cache.json
+          key: pinterest-state-${{ github.run_id }}
+          restore-keys: pinterest-state-
+
+      - name: Collect pins
+        env:
+          # Set PINTEREST_CLIENT_ID/SECRET + PINTEREST_REFRESH_TOKEN for
+          # auto-refreshing auth (see README "自動更新" section), or just
+          # PINTEREST_ACCESS_TOKEN if you don't mind replacing it manually
+          # every ~30 days.
+          PINTEREST_CLIENT_ID: ${{ secrets.PINTEREST_CLIENT_ID }}
+          PINTEREST_CLIENT_SECRET: ${{ secrets.PINTEREST_CLIENT_SECRET }}
+          PINTEREST_REFRESH_TOKEN: ${{ secrets.PINTEREST_REFRESH_TOKEN }}
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          # Gmail digest notifications (optional; see README)
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          CONFIG=config.yaml
+          [ -f "$CONFIG" ] || CONFIG=config.example.yaml
+          python -m collector --config "$CONFIG"
+
+      - name: Upload collected images
+        uses: actions/upload-artifact@v4
+        with:
+          name: collected-${{ github.run_number }}
+          path: pinterest-collector/collected/
+          if-no-files-found: ignore
+          retention-days: 30

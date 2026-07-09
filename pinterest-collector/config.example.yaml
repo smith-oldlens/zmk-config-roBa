@@ -1,0 +1,95 @@
+# pinterest-collector 設定サンプル
+# このファイルを config.yaml にコピーして自分好みに編集してください。
+#   cp config.example.yaml config.yaml
+
+sources:
+  # Pinterest 公式 API v5(要アクセストークン。自動更新の設定は README 参照)
+  api:
+    enabled: false
+    queries:
+      - "watercolor landscape painting"
+      - "浮世絵 風景"
+      - "film photography portrait"
+    per_query: 25
+
+  # 公開RSSフィード(APIキー不要)
+  # ユーザー全体:   https://www.pinterest.com/<username>/feed.rss
+  # 特定のボード:   https://www.pinterest.com/<username>/<board-slug>.rss
+  rss:
+    enabled: true
+    feeds:
+      - "https://www.pinterest.com/pinterest/feed.rss"
+
+# 好みの定義。タイトル+説明文にキーワードが含まれると加点/減点されます。
+preferences:
+  like_keywords:
+    - { word: "watercolor", weight: 2.0 }
+    - { word: "水彩", weight: 2.0 }
+    - { word: "landscape", weight: 1.0 }
+    - "illustration"          # weight 省略時は 1.0
+  dislike_keywords:
+    - { word: "nft", weight: 5.0 }
+    - { word: "ai generated", weight: 3.0 }
+  # このスコア以上のピンだけを収集
+  min_score: 1.0
+
+  # （オプション）CLIP による画像内容そのもののスコアリング。
+  # pip install -r requirements-clip.txt が必要。
+  clip:
+    enabled: false
+    positive_prompts:
+      - "a beautiful watercolor landscape painting"
+      - "soft pastel color illustration"
+    negative_prompts:
+      - "a screenshot of text"
+      - "a product advertisement"
+    weight: 3.0
+
+output:
+  # 画像とメタデータ(JSON)の保存先
+  download_dir: "./collected"
+  # （オプション）自分のボードに自動保存する場合はボードIDを指定(APIソースのみ)
+  save_to_board: null
+  # 1回の実行で収集する最大件数
+  max_items_per_run: 30
+  # 収集後に HTML ギャラリー(👍/👎 付き)を自動生成するか
+  gallery: true
+  # ギャラリーの出力先(相対パスは download_dir 内に配置)
+  gallery_file: "gallery.html"
+
+# ギャラリーのタブ自動振り分け。タイトル+説明文にキーワードが含まれる
+# カテゴリに分類されます(複数該当可)。どれにも該当しないものは「その他」タブへ。
+# config を編集すれば次回のギャラリー生成時に全画像が再分類されます。
+categories:
+  - { name: "風景", keywords: ["landscape", "風景", "山", "海", "空"] }
+  - { name: "イラスト", keywords: ["illustration", "イラスト", "drawing"] }
+  - { name: "水彩", keywords: ["watercolor", "水彩"] }
+  - { name: "写真", keywords: ["photography", "photo", "写真"] }
+
+# 重複画像検出(pHash)。URLやピンIDが違っても同じ画像なら除外します。
+dedupe:
+  enabled: true
+  # ハッシュのハミング距離がこの値以下なら同一画像とみなす(0=完全一致のみ)
+  max_distance: 5
+
+# Gmail通知(要 GMAIL_ADDRESS / GMAIL_APP_PASSWORD 環境変数。README参照)
+notify:
+  email:
+    enabled: false
+    to: null            # 送信先。省略時は GMAIL_ADDRESS 宛
+    frequency: daily    # every_run(毎回) | daily(日次) | weekly(週次)
+    hour: 8             # daily/weekly時: この時刻以降の最初の実行で送信
+    min_items: 1        # 溜まった件数がこれ未満なら次回に持ち越し
+    max_images: 5       # メールに埋め込む画像の上限
+
+# 収集済みピンの記録(重複防止)
+state_file: "./state.json"
+
+# アクセストークン/リフレッシュトークンのキャッシュ(--setup-auth で自動生成)
+token_cache_file: "./token_cache.json"
+
+# ギャラリーからエクスポートした 👍/👎 評価ファイル(--learn の入力)
+feedback_file: "./feedback.json"
+
+# フィードバックから学習した好みキーワード(--learn で自動更新)
+learned_file: "./learned.json"

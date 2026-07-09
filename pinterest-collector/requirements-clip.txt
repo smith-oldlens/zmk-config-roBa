@@ -1,0 +1,4 @@
+# Optional: CLIP image scoring
+torch>=2.0
+open_clip_torch>=2.20
+Pillow>=10.0
