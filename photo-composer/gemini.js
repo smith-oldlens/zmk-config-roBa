@@ -57,19 +57,30 @@ async function generate(apiKey, userPrompt) {
   return `data:${mimeType || 'image/png'};base64,${b64}`;
 }
 
+// 無料枠では画像生成の枠が0のため課金の有効化が必要（2025/12〜）。
+// 429/400 いずれの形でも案内できるよう定数化。
+const BILLING_MSG =
+  '画像生成には有料枠（お支払い設定）の有効化が必要です。' +
+  'Gemini の無料枠では画像を生成できません。' +
+  'Google AI Studio でキーのプロジェクトの「お支払い情報」を有効にしてください。';
+
 async function describeError(res) {
   let detail = '';
   try {
     const j = await res.json();
     detail = j.error?.message || '';
   } catch { /* 本文なし */ }
+  // billing / 課金に言及するエラーはステータスに依らず優先して案内
+  if (/billing|paid tier|free tier|plan and billing/i.test(detail)) return BILLING_MSG;
   switch (res.status) {
     case 400:
     case 403:
       if (/api key/i.test(detail)) return 'APIキーが無効です。設定画面で確認してください。';
       return `リクエストが拒否されました（${res.status}）。${detail}`;
     case 429:
-      return '利用上限（クォータ）に達しました。しばらく待ってから再試行してください。';
+      // 無料枠の画像生成は枠が0のため 429 になりやすい。まず課金を案内。
+      return BILLING_MSG +
+        '（すでに有効な場合は短時間のレート上限の可能性があるので、少し待って再試行してください）';
     case 500:
     case 503:
       return 'Gemini API が混雑しています。少し待ってから再試行してください。';

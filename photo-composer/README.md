@@ -14,7 +14,7 @@
 
 | サービス | モデル | キー取得先 | 特徴 | 状態 |
 |---|---|---|---|---|
-| Google Gemini | `gemini-2.5-flash-image` | [Google AI Studio](https://aistudio.google.com/apikey) | 無料枠あり。緑背景で生成し、ブラウザ内でクロマキー透過 | ✅ 有効 |
+| Google Gemini | `gemini-2.5-flash-image` | [Google AI Studio](https://aistudio.google.com/apikey) | 緑背景で生成し、ブラウザ内でクロマキー透過。**画像生成は有料枠（お支払い設定の有効化）が必要**（無料枠は画像生成の枠が0） | ✅ 有効 |
 | OpenAI | `gpt-image-1` | [OpenAI ダッシュボード](https://platform.openai.com/api-keys) | 透過PNGを直接生成するため切り抜き不要・輪郭がきれい。従量課金＋組織の本人確認が必要 | 実装済み・**一旦無効** |
 
 OpenAIを有効化するには `photo-composer/providers.js` の以下の2箇所のコメントを外すだけです：
@@ -31,6 +31,7 @@ export const PROVIDERS = [gemini, openai];  // ← openai を含める
 
 1. **APIキーを設定**（初回のみ）
    - アプリ右上の ⚙ から [Google AI Studio](https://aistudio.google.com/apikey) で取得したキーを貼り付けて保存（端末内にのみ保存されます）
+   - ⚠️ **画像生成には有料枠（お支払い設定）の有効化が必要です。** 2025年12月以降、Gemini の無料枠では画像を生成できません（`429` エラーになります）。AI Studio でキーのプロジェクトの「お支払い情報」を有効化してください（1枚あたり数円程度の従量課金）
 2. **風景写真を選ぶ**（ファイル選択 or ドラッグ＆ドロップ）
 3. **✨人物を生成** — プリセット（「白ワンピの女性（後ろ姿）」など）を選ぶか、
    自由に説明を入力して生成。緑背景で生成された人物が自動で切り抜かれます。
