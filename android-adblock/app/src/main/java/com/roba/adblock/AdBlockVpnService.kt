@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
@@ -25,6 +26,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.HttpsURLConnection
 
 /**
@@ -59,10 +61,18 @@ class AdBlockVpnService : VpnService() {
         // instead of queueing up behind a handful of slow DoH round-trips.
         private const val DNS_WORKERS = 12
         private const val DNS_QUEUE_CAPACITY = 512
-        private const val DNS_CONNECT_TIMEOUT_MS = 3_000
+        private const val DNS_CONNECT_TIMEOUT_MS = 2_000
         private const val DNS_TIMEOUT_MS = 5_000
         private const val PLAIN_DNS_TIMEOUT_MS = 3_000
         private const val MAX_DNS_MESSAGE_SIZE = VPN_MTU - 28
+
+        // If DoH fails this many times in a row it is probably blocked or
+        // throttled on this network, so we stop trying it for a while and go
+        // straight to plain DNS. Otherwise every single query would waste
+        // seconds on dead DoH endpoints, stalling the worker pool and making
+        // bursty apps (X, YouTube, ...) time out even though DNS "works".
+        private const val DOH_FAILURE_THRESHOLD = 2
+        private const val DOH_SUSPEND_MS = 60_000L
 
         @Volatile
         var isRunning = false
@@ -74,6 +84,12 @@ class AdBlockVpnService : VpnService() {
     private var executor: ThreadPoolExecutor? = null
     private var blockList = BlockList(emptySet())
     private lateinit var connectivityManager: ConnectivityManager
+
+    // DoH health tracking (see DOH_FAILURE_THRESHOLD).
+    private val dohConsecutiveFailures = AtomicInteger(0)
+
+    @Volatile
+    private var dohSuspendedUntilMs = 0L
 
     @Volatile
     private var underlyingNetwork: Network? = null
@@ -214,19 +230,30 @@ class AdBlockVpnService : VpnService() {
         dstPort: Int,
         output: FileOutputStream,
     ) {
-        // Prefer encrypted DoH for privacy.
-        for (resolverUrl in UPSTREAM_DOH_URLS) {
-            try {
-                val reply = queryDoh(resolverUrl, dns)
-                writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
-                return
-            } catch (e: IOException) {
-                Log.w(TAG, "DoH resolver $resolverUrl unavailable; trying next", e)
+        // Prefer encrypted DoH for privacy, but skip it while it is suspended
+        // (see below) so a blocked/throttled DoH endpoint does not add seconds
+        // of latency to every query.
+        if (SystemClock.elapsedRealtime() >= dohSuspendedUntilMs) {
+            for (resolverUrl in UPSTREAM_DOH_URLS) {
+                try {
+                    val reply = queryDoh(resolverUrl, dns)
+                    dohConsecutiveFailures.set(0)
+                    writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
+                    return
+                } catch (e: IOException) {
+                    Log.w(TAG, "DoH resolver $resolverUrl unavailable; trying next", e)
+                }
+            }
+            // Every DoH endpoint failed. After a few consecutive failures assume
+            // DoH is blocked on this network and stop using it for a while; it is
+            // re-probed automatically once the suspension expires.
+            if (dohConsecutiveFailures.incrementAndGet() >= DOH_FAILURE_THRESHOLD) {
+                dohSuspendedUntilMs = SystemClock.elapsedRealtime() + DOH_SUSPEND_MS
+                Log.w(TAG, "DoH looks blocked; using plain DNS for ${DOH_SUSPEND_MS / 1000}s")
             }
         }
-        // DoH is blocked or throttled (common on some carriers, or during a
-        // burst): fall back to plain UDP DNS so resolution still succeeds rather
-        // than reporting the name as unreachable.
+        // Fall back to plain UDP DNS so resolution still succeeds rather than
+        // reporting the name as unreachable.
         for (server in UPSTREAM_PLAIN_DNS) {
             try {
                 val reply = queryPlainDns(server, dns)
