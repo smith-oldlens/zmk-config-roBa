@@ -173,6 +173,35 @@ config PMW3610_BALL_ACTION_TICK
     help
         Ball action tick value. Higher values require more movement to trigger a ball action.
 
+config PMW3610_ACCEL_ENABLE
+    bool "Enable velocity-based cursor acceleration"
+    default n
+    help
+      When enabled, cursor movement is scaled up as the trackball is flicked faster,
+      on top of the flat CPI scaling. Only applies to normal cursor movement (not
+      scroll, snipe, or ball-action modes).
+
+config PMW3610_ACCEL_MIN_FACTOR
+    int "Acceleration factor at low speed (percent, 100=1x)"
+    default 100
+    range 50 500
+    help
+      Multiplier applied to slow trackball movement. 100 = no change.
+
+config PMW3610_ACCEL_MAX_FACTOR
+    int "Acceleration factor at high speed (percent, 100=1x)"
+    default 250
+    range 100 800
+    help
+      Multiplier applied once movement speed reaches PMW3610_ACCEL_SPEED_THRESHOLD.
+
+config PMW3610_ACCEL_SPEED_THRESHOLD
+    int "Movement-per-report at which max acceleration factor is reached"
+    default 8
+    range 1 60
+    help
+      Lower values reach max acceleration with a gentler flick.
+
 module = PMW3610
 module-str = PMW3610
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

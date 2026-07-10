@@ -716,6 +716,18 @@ static int pmw3610_report_data(const struct device *dev) {
     }
 #endif
 
+#ifdef CONFIG_PMW3610_ACCEL_ENABLE
+    if (input_mode == MOVE) {
+        int32_t speed = abs(x) + abs(y);
+        int32_t capped_speed = MIN(speed, CONFIG_PMW3610_ACCEL_SPEED_THRESHOLD);
+        int32_t factor = CONFIG_PMW3610_ACCEL_MIN_FACTOR +
+            (CONFIG_PMW3610_ACCEL_MAX_FACTOR - CONFIG_PMW3610_ACCEL_MIN_FACTOR) * capped_speed /
+                CONFIG_PMW3610_ACCEL_SPEED_THRESHOLD;
+        x = (int16_t)((int32_t)x * factor / 100);
+        y = (int16_t)((int32_t)y * factor / 100);
+    }
+#endif
+
     if (x != 0 || y != 0) {
         if (input_mode == MOVE || input_mode == SNIPE) {
 #if AUTOMOUSE_LAYER > 0
