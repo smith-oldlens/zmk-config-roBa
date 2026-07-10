@@ -661,6 +661,52 @@ $('importInput').addEventListener('change', (e) => {
   if (e.target.files[0]) importPersonImage(e.target.files[0]);
   e.target.value = '';
 });
+
+// クリップボードの画像を取り込む（外部AIで生成→コピー→ここで貼り付けの近道）
+$('pasteImportBtn').addEventListener('click', async () => {
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find((t) => t.startsWith('image/'));
+      if (type) {
+        const blob = await item.getType(type);
+        importPersonImage(new File([blob], 'clipboard.png', { type }));
+        return;
+      }
+    }
+    toast('クリップボードに画像がありません。先に画像をコピーしてください');
+  } catch {
+    toast('貼り付けが許可されませんでした。Ctrl/⌘+V でも取り込めます');
+  }
+});
+
+// Ctrl/⌘+V での貼り付け：生成モーダルが開いていれば人物、それ以外は背景として扱う
+window.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  if (!item) return;
+  const file = item.getAsFile();
+  if (!file) return;
+  e.preventDefault();
+  if (!$('genModal').hidden) importPersonImage(file);
+  else loadBackground(file);
+});
+
+// 外部AI用プロンプト（緑背景・全身の指定込み）をコピー
+function externalPrompt() {
+  const desc = $('promptInput').value.trim() || P.PRESETS[0].prompt;
+  return `${desc} 全身が頭のてっぺんからつま先まで完全に写っている立ち姿で、見切れていない。` +
+    '人物は画面の中央。背景は完全に均一で鮮やかなクロマキー用の緑一色（#00FF00）。' +
+    '背景に影を落とさない。柔らかい自然光。写実的な写真。';
+}
+$('copyPromptBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(externalPrompt());
+    toast('プロンプトをコピーしました。AIに貼り付けて生成してください');
+  } catch {
+    window.prompt('以下をコピーしてください', externalPrompt());
+  }
+});
+
 $('placeGenBtn').addEventListener('click', placeGenerated);
 $('discardGenBtn').addEventListener('click', () => {
   genRaw = genKeyed = null;
@@ -901,6 +947,42 @@ try {
 
 initPresets();
 initProviderSelect();
+
+// --- PWA（ホーム画面に追加・オフライン・共有シート受け取り） ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => { /* 非対応環境では無視 */ });
+}
+
+// 共有シート経由で開かれた場合：Service Worker が一時保存した画像を受け取る
+let sharedFile = null;
+if (new URLSearchParams(location.search).has('shared')) {
+  (async () => {
+    try {
+      const cache = await caches.open('scene-composer-shared');
+      const res = await cache.match('shared-image');
+      if (res) {
+        const blob = await res.blob();
+        await cache.delete('shared-image');
+        sharedFile = new File([blob], 'shared.png', { type: blob.type || 'image/png' });
+        openModal('shareModal');
+      }
+    } catch { /* 取得できなければ通常起動 */ }
+    history.replaceState(null, '', location.pathname);
+  })();
+}
+$('sharedAsPersonBtn').addEventListener('click', () => {
+  closeModal('shareModal');
+  if (!sharedFile) return;
+  openModal('genModal');
+  importPersonImage(sharedFile);
+  sharedFile = null;
+});
+$('sharedAsBgBtn').addEventListener('click', () => {
+  closeModal('shareModal');
+  if (!sharedFile) return;
+  loadBackground(sharedFile);
+  sharedFile = null;
+});
 
 // テストから内部状態を確認できるように公開（本番動作には影響しない）
 window.__scene = { state, render, refreshMatch, loadBackground };

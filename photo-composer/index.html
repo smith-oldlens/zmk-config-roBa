@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scene Composer — 風景に人物を合成</title>
+<meta name="theme-color" content="#16181d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -69,10 +73,25 @@
     <button id="runGenBtn" class="primary">✨ 生成する</button>
     <p id="genStatus" class="status" hidden></p>
 
-    <div class="or-divider"><span>または</span></div>
-    <button id="importBtn">🖼 手持ちの画像を取り込む（無料・APIキー不要）</button>
-    <p class="hint-text">切り抜き済みの透過PNGはそのまま使えます。背景つきの写真は下の「切り抜きの調整」で背景色をスポイト指定して抜けます。</p>
+    <div class="or-divider"><span>または（無料・APIキー不要）</span></div>
+    <div class="alt-actions">
+      <button id="importBtn" class="alt-btn">🖼 画像を取り込む</button>
+      <button id="pasteImportBtn" class="alt-btn">📋 貼り付けて取り込む</button>
+    </div>
+    <p class="hint-text">切り抜き済みの透過PNGはそのまま使えます。背景つきの写真は「切り抜きの調整」で背景色をスポイト指定して抜けます。コピーした画像は Ctrl/⌘+V でも取り込めます。</p>
     <input type="file" id="importInput" accept="image/*" hidden>
+
+    <details id="externalGen">
+      <summary>🤖 外部の無料AIで生成して取り込む手順</summary>
+      <ol class="hint-text steps">
+        <li>下のボタンで生成用プロンプトをコピー</li>
+        <li><a href="https://aistudio.google.com" target="_blank" rel="noopener">Google AI Studio</a>（無料）や
+            <a href="https://copilot.microsoft.com" target="_blank" rel="noopener">Copilot</a> に貼り付けて生成</li>
+        <li>できた画像をコピー（またはスマホなら保存→共有）</li>
+        <li>ここに戻って「📋 貼り付けて取り込む」</li>
+      </ol>
+      <button id="copyPromptBtn">📋 生成用プロンプトをコピー</button>
+    </details>
 
     <div id="genResult" hidden>
       <div class="preview-wrap checker">
@@ -143,6 +162,19 @@
     </div>
     <p id="exportStatus" class="status" hidden></p>
     <button class="modal-close" data-close="exportModal">×</button>
+  </div>
+</div>
+
+<!-- 共有シートから受け取った画像の使い道を選ぶ -->
+<div id="shareModal" class="modal" hidden>
+  <div class="modal-box">
+    <h2>共有された画像</h2>
+    <p class="hint-text">受け取った画像をどう使いますか？</p>
+    <div class="modal-actions">
+      <button id="sharedAsPersonBtn" class="primary">人物として取り込む</button>
+      <button id="sharedAsBgBtn">背景写真にする</button>
+    </div>
+    <button class="modal-close" data-close="shareModal">×</button>
   </div>
 </div>
 
