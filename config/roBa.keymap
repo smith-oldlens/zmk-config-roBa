@@ -45,6 +45,21 @@
             key-positions = <24 25>;
         };
 
+        copy {
+            bindings = <&kp LG(C)>;
+            key-positions = <1 2>;
+        };
+
+        past {
+            bindings = <&kp LG(V)>;
+            key-positions = <2 3>;
+        };
+
+        Esk {
+            bindings = <&kp ESCAPE>;
+            key-positions = <0 1>;
+        };
+
     };
 
     macros {
