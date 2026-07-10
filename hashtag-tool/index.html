@@ -192,8 +192,17 @@ button.btn:disabled{opacity:.4; cursor:default; transform:none}
   border-radius:999px; padding:4px 6px 4px 11px; font-size:12.5px; font-family:inherit;
 }
 .chips-row .pick:hover{border-color:var(--accent)}
-.chips-row .pick .rm{border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:0 2px}
-.chips-row .pick .rm:hover{color:var(--danger)}
+.chips-row .pick .rm,.chips-row .pick .edit,.chips-row .pick .save,.chips-row .pick .cancel{
+  border:none; background:none; color:var(--muted); cursor:pointer; font-size:13px; line-height:1; padding:0 3px;
+}
+.chips-row .pick .edit:hover,.chips-row .pick .save:hover{color:var(--accent)}
+.chips-row .pick .rm:hover,.chips-row .pick .cancel:hover{color:var(--danger)}
+.chips-row .pick.editing{padding-left:11px; gap:2px}
+.chips-row .pick .chipedit{
+  width:8.5em; border:none; background:transparent; color:var(--ink);
+  font-family:inherit; font-size:12.5px; padding:2px 0; border-bottom:1px solid var(--accent); border-radius:0;
+}
+.chips-row .pick .chipedit:focus{outline:none}
 .chips-row .empty{font-size:11.5px; color:var(--muted)}
 .preview-head{display:flex; align-items:baseline; justify-content:space-between; margin:6px 0 5px}
 .actions{display:flex; gap:8px; margin-top:12px}
@@ -807,14 +816,21 @@ function renderDesign(){
   $("#bgBlur").value = S.settings.bgBlur; $("#bgBlurLabel").textContent = S.settings.bgBlur + "px";
 }
 
+let editingChip = null; // {mode, value}
 function renderCredit(){
   $("#camera").value = S.credit.camera || "";
   $("#lens").value = S.credit.lens || "";
   $("#mentions").value = S.credit.mentions || "";
+  const pre = m => m==="mention" ? "@" : "";
   const chipRow = (elId, list, mode) => {
     const el = $(elId);
     if(!list.length){ el.innerHTML = `<span class="empty">よく使うものはコピー時に自動で記憶されます</span>`; return; }
-    el.innerHTML = list.map(v=>`<span class="pick"><button type="button" class="fill" data-v="${esc(v)}">${esc(mode==="mention"?"@"+v:v)}</button><button type="button" class="rm" data-v="${esc(v)}" aria-label="記憶から削除">×</button></span>`).join("");
+    el.innerHTML = list.map(v=>{
+      if(editingChip && editingChip.mode===mode && editingChip.value===v){
+        return `<span class="pick editing">${esc(pre(mode))}<input type="text" class="chipedit" value="${esc(v)}" aria-label="編集"><button type="button" class="save" data-v="${esc(v)}" aria-label="保存">✓</button><button type="button" class="cancel" aria-label="取消">✗</button></span>`;
+      }
+      return `<span class="pick"><button type="button" class="fill" data-v="${esc(v)}">${esc(pre(mode)+v)}</button><button type="button" class="edit" data-v="${esc(v)}" aria-label="編集">✎</button><button type="button" class="rm" data-v="${esc(v)}" aria-label="記憶から削除">×</button></span>`;
+    }).join("");
     el.querySelectorAll(".fill").forEach(b=>b.addEventListener("click", ()=>{
       const v = b.dataset.v;
       if(mode==="mention"){ const cur=mentionTokens(); if(!cur.includes(v)){ cur.push(v); S.credit.mentions = cur.map(x=>"@"+x).join(" "); } }
@@ -822,9 +838,33 @@ function renderCredit(){
       else { S.credit.lens = v; }
       save(); renderCredit(); if(S.current && S.current.length) $("#resultText").value = fullText();
     }));
+    el.querySelectorAll(".edit").forEach(b=>b.addEventListener("click", ()=>{
+      editingChip = {mode, value:b.dataset.v}; renderCredit();
+      const inp = el.querySelector(".chipedit"); if(inp){ inp.focus(); inp.select(); }
+    }));
     el.querySelectorAll(".rm").forEach(b=>b.addEventListener("click", ()=>{
       const i=list.indexOf(b.dataset.v); if(i>=0) list.splice(i,1); save(); renderCredit();
     }));
+    const commit = (oldV, inp) => {
+      const nv = inp.value.trim().replace(/^@+/,"");
+      const i = list.indexOf(oldV);
+      if(nv){
+        const dup = list.indexOf(nv);
+        if(dup>=0 && dup!==i) list.splice(dup,1);       // 既存と重複したらまとめる
+        const at = list.indexOf(oldV);
+        if(at>=0) list[at] = nv;
+      }else{
+        if(i>=0) list.splice(i,1);                       // 空にしたら削除
+      }
+      editingChip = null; save(); renderCredit();
+    };
+    el.querySelectorAll(".pick.editing").forEach(span=>{
+      const inp = span.querySelector(".chipedit");
+      const oldV = span.querySelector(".save").dataset.v;
+      span.querySelector(".save").addEventListener("click", ()=>commit(oldV, inp));
+      span.querySelector(".cancel").addEventListener("click", ()=>{ editingChip=null; renderCredit(); });
+      inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); commit(oldV, inp); } else if(e.key==="Escape"){ editingChip=null; renderCredit(); } });
+    });
   };
   chipRow("#mentionChips", S.creditSaved.mentions, "mention");
   chipRow("#cameraChips", S.creditSaved.cameras, "camera");
