@@ -16,6 +16,10 @@ import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
 import java.net.URL
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
@@ -44,12 +48,20 @@ class AdBlockVpnService : VpnService() {
             "https://cloudflare-dns.com/dns-query",
             "https://dns.google/dns-query",
         )
+        // Plain-UDP resolvers used only when every DoH endpoint fails, so name
+        // resolution keeps working instead of returning SERVFAIL to the app.
+        private val UPSTREAM_PLAIN_DNS = listOf("1.1.1.1", "8.8.8.8")
         private const val CHANNEL_ID = "adblock_vpn"
         private const val NOTIFICATION_ID = 1
         private const val VPN_MTU = 9000
-        private const val DNS_WORKERS = 4
-        private const val DNS_QUEUE_CAPACITY = 128
+        // DNS forwarding is network-I/O bound, so more workers than CPUs is fine
+        // and lets bursty apps (YouTube, Play Store, ...) resolve in parallel
+        // instead of queueing up behind a handful of slow DoH round-trips.
+        private const val DNS_WORKERS = 12
+        private const val DNS_QUEUE_CAPACITY = 512
+        private const val DNS_CONNECT_TIMEOUT_MS = 3_000
         private const val DNS_TIMEOUT_MS = 5_000
+        private const val PLAIN_DNS_TIMEOUT_MS = 3_000
         private const val MAX_DNS_MESSAGE_SIZE = VPN_MTU - 28
 
         @Volatile
@@ -184,7 +196,11 @@ class AdBlockVpnService : VpnService() {
             try {
                 executor?.execute { forwardQuery(dns, srcIp, srcPort, dstIp, dstPort, output) }
             } catch (_: RejectedExecutionException) {
-                writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
+                // Under a heavy burst we drop the query instead of answering
+                // SERVFAIL: the client's resolver simply retries once the queue
+                // drains, whereas a SERVFAIL makes apps like YouTube conclude
+                // the network is offline.
+                Log.w(TAG, "DNS queue full; dropping query so the client retries")
             }
         }
     }
@@ -198,13 +214,26 @@ class AdBlockVpnService : VpnService() {
         dstPort: Int,
         output: FileOutputStream,
     ) {
+        // Prefer encrypted DoH for privacy.
         for (resolverUrl in UPSTREAM_DOH_URLS) {
             try {
                 val reply = queryDoh(resolverUrl, dns)
                 writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
                 return
             } catch (e: IOException) {
-                Log.w(TAG, "encrypted DNS resolver unavailable; trying fallback", e)
+                Log.w(TAG, "DoH resolver $resolverUrl unavailable; trying next", e)
+            }
+        }
+        // DoH is blocked or throttled (common on some carriers, or during a
+        // burst): fall back to plain UDP DNS so resolution still succeeds rather
+        // than reporting the name as unreachable.
+        for (server in UPSTREAM_PLAIN_DNS) {
+            try {
+                val reply = queryPlainDns(server, dns)
+                writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
+                return
+            } catch (e: IOException) {
+                Log.w(TAG, "plain DNS resolver $server unavailable; trying next", e)
             }
         }
         writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
@@ -214,7 +243,7 @@ class AdBlockVpnService : VpnService() {
         val network = currentUnderlyingNetwork() ?: throw IOException("No underlying network")
         val connection = network.openConnection(URL(resolverUrl)) as HttpsURLConnection
         connection.requestMethod = "POST"
-        connection.connectTimeout = DNS_TIMEOUT_MS
+        connection.connectTimeout = DNS_CONNECT_TIMEOUT_MS
         connection.readTimeout = DNS_TIMEOUT_MS
         connection.doOutput = true
         connection.instanceFollowRedirects = false
@@ -222,31 +251,59 @@ class AdBlockVpnService : VpnService() {
         connection.setRequestProperty("Content-Type", "application/dns-message")
         connection.setFixedLengthStreamingMode(dns.size)
 
-        return try {
+        try {
             connection.outputStream.use { it.write(dns) }
             if (connection.responseCode != HttpsURLConnection.HTTP_OK) {
                 throw IOException("DoH returned HTTP ${connection.responseCode}")
             }
-            connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(4096)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    if (output.size() + read > MAX_DNS_MESSAGE_SIZE) {
-                        throw IOException("DNS response too large")
-                    }
-                    output.write(buffer, 0, read)
-                }
-                output.toByteArray().also {
-                    if (it.size < 12) throw IOException("DNS response too short")
-                    if (DnsMessage.readU16(it, 0) != DnsMessage.readU16(dns, 0)) {
-                        throw IOException("DNS transaction ID mismatch")
-                    }
-                }
-            }
-        } finally {
+            // Read fully and close (but do NOT disconnect) so the keep-alive
+            // connection returns to the pool and the next query reuses the TLS
+            // session instead of paying for a fresh handshake every time.
+            return connection.inputStream.use { input -> readDnsMessage(input, dns) }
+        } catch (e: IOException) {
+            // A failed connection is poisoned; drop it rather than pooling it.
             connection.disconnect()
+            throw e
+        }
+    }
+
+    /** Forwards the query over an unencrypted UDP socket kept off the VPN. */
+    private fun queryPlainDns(server: String, dns: ByteArray): ByteArray {
+        val network = currentUnderlyingNetwork() ?: throw IOException("No underlying network")
+        DatagramSocket().use { socket ->
+            protect(socket)
+            network.bindSocket(socket)
+            socket.soTimeout = PLAIN_DNS_TIMEOUT_MS
+            // Server is an IP literal, so getByName does not itself hit DNS.
+            socket.send(DatagramPacket(dns, dns.size, InetAddress.getByName(server), 53))
+            val buffer = ByteArray(4096)
+            val reply = DatagramPacket(buffer, buffer.size)
+            socket.receive(reply)
+            val response = buffer.copyOf(reply.length)
+            if (response.size < 12) throw IOException("DNS response too short")
+            if (DnsMessage.readU16(response, 0) != DnsMessage.readU16(dns, 0)) {
+                throw IOException("DNS transaction ID mismatch")
+            }
+            return response
+        }
+    }
+
+    private fun readDnsMessage(input: InputStream, query: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(4096)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            if (out.size() + read > MAX_DNS_MESSAGE_SIZE) {
+                throw IOException("DNS response too large")
+            }
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray().also {
+            if (it.size < 12) throw IOException("DNS response too short")
+            if (DnsMessage.readU16(it, 0) != DnsMessage.readU16(query, 0)) {
+                throw IOException("DNS transaction ID mismatch")
+            }
         }
     }
 
