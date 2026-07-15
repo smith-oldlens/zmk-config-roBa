@@ -6,6 +6,9 @@
 # The list is intentionally conservative: only well-known ad/tracking
 # networks, so that normal site features (login, video, maps, ...) keep
 # working.
+#
+# Do not add YouTube/X content delivery domains here. allowlist.txt overrides
+# this file as a final safeguard against broken video, images, and posts.
 
 # --- Google ads ---
 doubleclick.net

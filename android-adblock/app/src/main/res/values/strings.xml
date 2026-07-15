@@ -7,5 +7,5 @@
     <string name="button_stop">ブロックを停止</string>
     <string name="notification_channel">広告ブロックVPN</string>
     <string name="notification_running">広告ドメインへのDNS問い合わせをブロック中</string>
-    <string name="description">ローカルVPNとしてDNSの問い合わせだけを検査し、広告・トラッカーのドメインをブロックします。\n\n許可したDNS問い合わせは暗号化してCloudflareへ送信し、障害時のみGoogle Public DNSへ切り替えます。Webページ本文・写真・パスワードなどは本アプリを通りません。\n\n他のVPNとは同時に使えません。Chromeなどの「セキュアDNS」を有効にしていると、広告ブロックを迂回する場合があります。</string>
+    <string name="description">ローカルVPNとしてDNSの問い合わせだけを検査し、広告・トラッカーのドメインをブロックします。\n\n許可したDNS問い合わせはAndroid標準のDNS機能へ渡します。端末でプライベートDNSを設定している場合は、その設定も引き継がれます。Webページ本文・写真・パスワードなどは本アプリを通りません。\n\n他のVPNとは同時に使えません。Chromeなどの「セキュアDNS」を有効にしていると、広告ブロックを迂回する場合があります。</string>
 </resources>
