@@ -1,0 +1,20 @@
+# roBa AdBlock - service compatibility allowlist
+#
+# These domains carry actual posts, images, thumbnails, API responses, or video
+# segments. The allowlist overrides blocklist.txt and also covers subdomains.
+# DNS filtering cannot reliably separate ads from content on these domains.
+
+# --- YouTube playback and artwork ---
+youtube.com
+youtu.be
+youtube-nocookie.com
+youtubei.googleapis.com
+googlevideo.com
+ytimg.com
+ggpht.com
+
+# --- X / Twitter posts, images, and video ---
+x.com
+twitter.com
+t.co
+twimg.com
