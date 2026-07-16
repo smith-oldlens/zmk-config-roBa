@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const stage = $('stage');
 
 const PREVIEW_MAX = 2048;       // 編集中プレビューの最大長辺
+const PERSON_IMPORT_MAX = 1600; // 取り込む人物画像の最大長辺（重い処理のフリーズ防止）
 const DEFAULT_HEIGHT_RATIO = 0.18; // 配置時の人物の高さ（背景高さ比）
 const MIN_HEIGHT_RATIO = 0.03;  // 人物の高さの下限（背景高さ比）
 const MAX_HEIGHT_RATIO = 0.9;   // 人物の高さの上限（背景高さ比）
@@ -604,7 +605,12 @@ async function importPersonImage(file) {
     toast('この画像は読み込めませんでした');
     return;
   }
-  genRaw = C.canvasFrom(bmp);
+  // スマホの写真をそのまま選ぶと数千px級になり、透過判定やクロマキーの
+  // 全ピクセル走査でUIが数秒固まることがあるため、取り込み時点で縮小しておく。
+  const s = Math.min(1, PERSON_IMPORT_MAX / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * s), h = Math.round(bmp.height * s);
+  genRaw = C.createCanvas(w, h);
+  genRaw.getContext('2d').drawImage(bmp, 0, 0, w, h);
   bmp.close?.();
   genPrompt = file.name.replace(/\.[^.]+$/, '') || '取り込み画像';
   genKeyColor = null;
