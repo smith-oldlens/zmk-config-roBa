@@ -4,30 +4,30 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.annotation.TargetApi
 import android.content.Intent
 import android.net.ConnectivityManager
-import android.net.DnsResolver
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
-import android.os.Build
-import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.URL
 import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * DNS-filtering VPN in the style of DNS66 / personalDNSfilter.
@@ -46,7 +46,13 @@ class AdBlockVpnService : VpnService() {
         private const val TAG = "AdBlockVpn"
         private const val VPN_ADDRESS = "10.111.222.1"
         private const val VIRTUAL_DNS = "10.111.222.53"
-        private val PUBLIC_DNS_FALLBACK = listOf("1.1.1.1", "8.8.8.8")
+        private val UPSTREAM_DOH_URLS = listOf(
+            "https://cloudflare-dns.com/dns-query",
+            "https://dns.google/dns-query",
+        )
+        // Plain-UDP resolvers used only when every DoH endpoint fails, so name
+        // resolution keeps working instead of returning SERVFAIL to the app.
+        private val UPSTREAM_PLAIN_DNS = listOf("1.1.1.1", "8.8.8.8")
         private const val CHANNEL_ID = "adblock_vpn"
         private const val NOTIFICATION_ID = 1
         private const val VPN_MTU = 9000
@@ -55,10 +61,18 @@ class AdBlockVpnService : VpnService() {
         // instead of queueing up behind a handful of slow DoH round-trips.
         private const val DNS_WORKERS = 12
         private const val DNS_QUEUE_CAPACITY = 512
+        private const val DNS_CONNECT_TIMEOUT_MS = 2_000
         private const val DNS_TIMEOUT_MS = 5_000
-        private const val PLAIN_DNS_TIMEOUT_MS = 1_500
+        private const val PLAIN_DNS_TIMEOUT_MS = 3_000
         private const val MAX_DNS_MESSAGE_SIZE = VPN_MTU - 28
-        private val DIRECT_EXECUTOR = Executor { command -> command.run() }
+
+        // If DoH fails this many times in a row it is probably blocked or
+        // throttled on this network, so we stop trying it for a while and go
+        // straight to plain DNS. Otherwise every single query would waste
+        // seconds on dead DoH endpoints, stalling the worker pool and making
+        // bursty apps (X, YouTube, ...) time out even though DNS "works".
+        private const val DOH_FAILURE_THRESHOLD = 2
+        private const val DOH_SUSPEND_MS = 60_000L
 
         @Volatile
         var isRunning = false
@@ -71,12 +85,17 @@ class AdBlockVpnService : VpnService() {
     private var blockList = BlockList(emptySet())
     private lateinit var connectivityManager: ConnectivityManager
 
+    // DoH health tracking (see DOH_FAILURE_THRESHOLD).
+    private val dohConsecutiveFailures = AtomicInteger(0)
+
+    @Volatile
+    private var dohSuspendedUntilMs = 0L
+
     @Volatile
     private var underlyingNetwork: Network? = null
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            if (!isUsableUnderlyingNetwork(network)) return
             underlyingNetwork = network
             if (isRunning) setUnderlyingNetworks(arrayOf(network))
         }
@@ -89,10 +108,11 @@ class AdBlockVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         connectivityManager = getSystemService(ConnectivityManager::class.java)
-        // Follow Android's current default physical network. Listening for any
-        // internet-capable network can accidentally select idle cellular while
-        // the app's real traffic is on Wi-Fi, producing mismatched DNS results.
-        connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        connectivityManager.registerNetworkCallback(request, networkCallback)
         underlyingNetwork = connectivityManager.activeNetwork?.takeIf(::isUsableUnderlyingNetwork)
     }
 
@@ -201,7 +221,7 @@ class AdBlockVpnService : VpnService() {
         }
     }
 
-    /** Uses Android's resolver on the real network and relays the answer back. */
+    /** Sends the query to an encrypted DNS resolver and relays the answer back. */
     private fun forwardQuery(
         dns: ByteArray,
         srcIp: ByteArray,
@@ -210,111 +230,108 @@ class AdBlockVpnService : VpnService() {
         dstPort: Int,
         output: FileOutputStream,
     ) {
-        val network = currentUnderlyingNetwork()
-        if (network == null) {
-            writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
-            return
+        // Prefer encrypted DoH for privacy, but skip it while it is suspended
+        // (see below) so a blocked/throttled DoH endpoint does not add seconds
+        // of latency to every query.
+        if (SystemClock.elapsedRealtime() >= dohSuspendedUntilMs) {
+            for (resolverUrl in UPSTREAM_DOH_URLS) {
+                try {
+                    val reply = queryDoh(resolverUrl, dns)
+                    dohConsecutiveFailures.set(0)
+                    writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
+                    return
+                } catch (e: IOException) {
+                    Log.w(TAG, "DoH resolver $resolverUrl unavailable; trying next", e)
+                }
+            }
+            // Every DoH endpoint failed. After a few consecutive failures assume
+            // DoH is blocked on this network and stop using it for a while; it is
+            // re-probed automatically once the suspension expires.
+            if (dohConsecutiveFailures.incrementAndGet() >= DOH_FAILURE_THRESHOLD) {
+                dohSuspendedUntilMs = SystemClock.elapsedRealtime() + DOH_SUSPEND_MS
+                Log.w(TAG, "DoH looks blocked; using plain DNS for ${DOH_SUSPEND_MS / 1000}s")
+            }
         }
-
-        // Android's resolver already handles caching, retries, network changes,
-        // TCP fallback, and the user's Private DNS setting. Sending every query
-        // through hand-written DoH connections caused the first burst from apps
-        // such as YouTube and X to stall when those endpoints were throttled.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Fall back to plain UDP DNS so resolution still succeeds rather than
+        // reporting the name as unreachable.
+        for (server in UPSTREAM_PLAIN_DNS) {
             try {
-                val reply = querySystemDns(network, dns)
+                val reply = queryPlainDns(server, dns)
                 writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
                 return
             } catch (e: IOException) {
-                Log.w(TAG, "Android DNS resolver unavailable; trying direct fallback", e)
+                Log.w(TAG, "plain DNS resolver $server unavailable; trying next", e)
             }
-        }
-
-        try {
-            val reply = queryPlainDns(network, dns)
-            writeUdpPacket(output, dstIp, dstPort, srcIp, srcPort, reply)
-            return
-        } catch (e: IOException) {
-            Log.w(TAG, "all DNS resolvers unavailable", e)
         }
         writeErrorResponse(dns, srcIp, srcPort, dstIp, dstPort, output)
     }
 
-    @TargetApi(Build.VERSION_CODES.Q)
-    private fun querySystemDns(network: Network, dns: ByteArray): ByteArray {
-        val answer = AtomicReference<ByteArray?>()
-        val error = AtomicReference<Throwable?>()
-        val completed = CountDownLatch(1)
-        val cancellation = CancellationSignal()
+    private fun queryDoh(resolverUrl: String, dns: ByteArray): ByteArray {
+        val network = currentUnderlyingNetwork() ?: throw IOException("No underlying network")
+        val connection = network.openConnection(URL(resolverUrl)) as HttpsURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = DNS_CONNECT_TIMEOUT_MS
+        connection.readTimeout = DNS_TIMEOUT_MS
+        connection.doOutput = true
+        connection.instanceFollowRedirects = false
+        connection.setRequestProperty("Accept", "application/dns-message")
+        connection.setRequestProperty("Content-Type", "application/dns-message")
+        connection.setFixedLengthStreamingMode(dns.size)
 
-        DnsResolver.getInstance().rawQuery(
-            network,
-            dns,
-            DnsResolver.FLAG_EMPTY,
-            DIRECT_EXECUTOR,
-            cancellation,
-            object : DnsResolver.Callback<ByteArray> {
-                override fun onAnswer(reply: ByteArray, rcode: Int) {
-                    answer.set(reply)
-                    completed.countDown()
-                }
-
-                override fun onError(exception: DnsResolver.DnsException) {
-                    error.set(exception)
-                    completed.countDown()
-                }
-            },
-        )
-
-        if (!completed.await(DNS_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)) {
-            cancellation.cancel()
-            throw IOException("Android DNS resolver timed out")
-        }
-        val reply = answer.get()
-        if (reply == null) {
-            throw IOException("Android DNS resolver failed", error.get())
-        }
-        return validateDnsResponse(reply, dns)
-    }
-
-    /** Direct fallback for Android 8, or if the platform resolver itself fails. */
-    private fun queryPlainDns(network: Network, dns: ByteArray): ByteArray {
-        val configured = connectivityManager.getLinkProperties(network)?.dnsServers.orEmpty()
-        val publicFallback = PUBLIC_DNS_FALLBACK.map(InetAddress::getByName)
-        val servers = (configured + publicFallback).distinctBy { it.hostAddress }
-        var lastError: IOException? = null
-
-        for (server in servers) {
-            try {
-                return queryPlainDnsServer(network, server, dns)
-            } catch (e: IOException) {
-                lastError = e
-                Log.w(TAG, "DNS server ${server.hostAddress} unavailable; trying next", e)
+        try {
+            connection.outputStream.use { it.write(dns) }
+            if (connection.responseCode != HttpsURLConnection.HTTP_OK) {
+                throw IOException("DoH returned HTTP ${connection.responseCode}")
             }
+            // Read fully and close (but do NOT disconnect) so the keep-alive
+            // connection returns to the pool and the next query reuses the TLS
+            // session instead of paying for a fresh handshake every time.
+            return connection.inputStream.use { input -> readDnsMessage(input, dns) }
+        } catch (e: IOException) {
+            // A failed connection is poisoned; drop it rather than pooling it.
+            connection.disconnect()
+            throw e
         }
-        throw lastError ?: IOException("No DNS servers available")
     }
 
-    private fun queryPlainDnsServer(network: Network, server: InetAddress, dns: ByteArray): ByteArray {
+    /** Forwards the query over an unencrypted UDP socket kept off the VPN. */
+    private fun queryPlainDns(server: String, dns: ByteArray): ByteArray {
+        val network = currentUnderlyingNetwork() ?: throw IOException("No underlying network")
         DatagramSocket().use { socket ->
-            if (!protect(socket)) throw IOException("Could not protect DNS socket from VPN")
+            protect(socket)
             network.bindSocket(socket)
             socket.soTimeout = PLAIN_DNS_TIMEOUT_MS
-            socket.send(DatagramPacket(dns, dns.size, server, 53))
-            val buffer = ByteArray(MAX_DNS_MESSAGE_SIZE)
+            // Server is an IP literal, so getByName does not itself hit DNS.
+            socket.send(DatagramPacket(dns, dns.size, InetAddress.getByName(server), 53))
+            val buffer = ByteArray(4096)
             val reply = DatagramPacket(buffer, buffer.size)
             socket.receive(reply)
-            return validateDnsResponse(buffer.copyOf(reply.length), dns)
+            val response = buffer.copyOf(reply.length)
+            if (response.size < 12) throw IOException("DNS response too short")
+            if (DnsMessage.readU16(response, 0) != DnsMessage.readU16(dns, 0)) {
+                throw IOException("DNS transaction ID mismatch")
+            }
+            return response
         }
     }
 
-    private fun validateDnsResponse(response: ByteArray, query: ByteArray): ByteArray {
-        if (response.size < 12) throw IOException("DNS response too short")
-        if (response.size > MAX_DNS_MESSAGE_SIZE) throw IOException("DNS response too large")
-        if (DnsMessage.readU16(response, 0) != DnsMessage.readU16(query, 0)) {
-            throw IOException("DNS transaction ID mismatch")
+    private fun readDnsMessage(input: InputStream, query: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(4096)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            if (out.size() + read > MAX_DNS_MESSAGE_SIZE) {
+                throw IOException("DNS response too large")
+            }
+            out.write(buffer, 0, read)
         }
-        return response
+        return out.toByteArray().also {
+            if (it.size < 12) throw IOException("DNS response too short")
+            if (DnsMessage.readU16(it, 0) != DnsMessage.readU16(query, 0)) {
+                throw IOException("DNS transaction ID mismatch")
+            }
+        }
     }
 
     private fun currentUnderlyingNetwork(): Network? {
