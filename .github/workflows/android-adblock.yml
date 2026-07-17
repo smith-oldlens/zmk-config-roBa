@@ -97,5 +97,5 @@ jobs:
             dist/roba-adblock.apk.sha256 \
             --target "$GITHUB_SHA" \
             --title "roBa AdBlock v${VERSION_NAME}" \
-            --notes "固定署名された正式版です。YouTubeとXの誤遮断を防ぎ、未ブロックの問い合わせはAndroid標準DNSへ渡して通信の安定性を優先します。" \
+            --notes "固定署名された正式版です。実績のあるDNSエンジン(暗号化DNS+自動フォールバック)を採用し、YouTubeとXの誤遮断を防ぎます。設定のプライベートDNSにホスト名を指定している場合は「自動」に戻してからご利用ください。" \
             --latest
