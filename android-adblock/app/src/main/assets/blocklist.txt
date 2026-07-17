@@ -70,12 +70,13 @@ hilltopads.net
 onclickads.net
 
 # --- Trackers / measurement ---
+# NOTE: app-attribution / deep-link SDKs (adjust.com, appsflyer.com,
+# branch.io) are deliberately NOT listed. Many apps require them to resolve
+# at startup and show a "network error" when they are blocked, while they
+# contribute nothing to visible ads.
 scorecardresearch.com
 quantserve.com
 moatads.com
-adjust.com
-appsflyer.com
-branch.io
 hotjar.com
 mouseflow.com
 
