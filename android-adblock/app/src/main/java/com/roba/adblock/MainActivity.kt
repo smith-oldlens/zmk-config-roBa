@@ -16,6 +16,7 @@ class MainActivity : Activity() {
 
     private lateinit var statusText: TextView
     private lateinit var toggleButton: Button
+    private lateinit var excludeButton: Button
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,9 +24,13 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         statusText = findViewById(R.id.status_text)
         toggleButton = findViewById(R.id.toggle_button)
+        excludeButton = findViewById(R.id.exclude_button)
 
         toggleButton.setOnClickListener {
             if (AdBlockVpnService.isRunning) stopVpn() else prepareAndStart()
+        }
+        excludeButton.setOnClickListener {
+            startActivityForResult(Intent(this, AppPickerActivity::class.java), REQUEST_APP_PICKER)
         }
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -55,6 +60,17 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_VPN_CONSENT && resultCode == RESULT_OK) {
             startVpn()
         }
+        // Exclusion list changed while filtering is on -> restart to apply it.
+        if (requestCode == REQUEST_APP_PICKER && resultCode == RESULT_OK &&
+            AdBlockVpnService.isRunning
+        ) {
+            restartVpn()
+        }
+    }
+
+    private fun restartVpn() {
+        stopVpn()
+        handler.postDelayed({ startVpn() }, 700)
     }
 
     private fun startVpn() {
@@ -89,5 +105,6 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_VPN_CONSENT = 1
         private const val REQUEST_NOTIFICATION = 2
+        private const val REQUEST_APP_PICKER = 3
     }
 }

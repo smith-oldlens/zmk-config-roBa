@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Needed to list installed apps in the per-app exclusion picker. This
+         app is distributed as a sideloaded APK, not via Google Play. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <application
         android:label="@string/app_name"
@@ -23,6 +26,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".AppPickerActivity"
+            android:exported="false"
+            android:label="@string/exclude_title" />
 
         <service
             android:name=".AdBlockVpnService"
