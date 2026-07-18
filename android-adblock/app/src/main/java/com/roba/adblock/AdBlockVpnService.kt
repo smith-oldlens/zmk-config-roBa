@@ -53,6 +53,16 @@ class AdBlockVpnService : VpnService() {
         // Plain-UDP resolvers used only when every DoH endpoint fails, so name
         // resolution keeps working instead of returning SERVFAIL to the app.
         private val UPSTREAM_PLAIN_DNS = listOf("1.1.1.1", "8.8.8.8")
+
+        // Apps that break under DNS ad-filtering because the service itself
+        // depends on shared ad/measurement domains (which we cannot allowlist
+        // without unblocking them everywhere). They are routed outside the VPN
+        // entirely, so they work normally while every other app stays filtered.
+        // Netflix's ad-supported tier gates playback on Xandr (adnxs.com) and
+        // Comscore (scorecardresearch.com).
+        private val EXCLUDED_APPS = listOf(
+            "com.netflix.mediaclient",
+        )
         private const val CHANNEL_ID = "adblock_vpn"
         private const val NOTIFICATION_ID = 1
         private const val VPN_MTU = 9000
@@ -148,6 +158,16 @@ class AdBlockVpnService : VpnService() {
             builder.addDisallowedApplication(packageName)
         } catch (e: Exception) {
             Log.w(TAG, "could not exclude self from VPN", e)
+        }
+        // Route known-incompatible apps outside the VPN. addDisallowedApplication
+        // throws if the package is not installed, so guard each one individually.
+        for (pkg in EXCLUDED_APPS) {
+            try {
+                builder.addDisallowedApplication(pkg)
+                Log.i(TAG, "excluded $pkg from VPN")
+            } catch (e: Exception) {
+                Log.d(TAG, "excluded app $pkg not installed; skipping")
+            }
         }
 
         val fd = builder.establish()
