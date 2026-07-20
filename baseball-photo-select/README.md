@@ -16,7 +16,8 @@ baseball-photo-select/
     ├── 01-architecture.md    ← 確定した全体設計(なぜこの形か、変更禁止事項)
     ├── 02-spec-pipeline.md   ← 実装仕様書(モジュール/関数シグネチャ/DBスキーマ/アルゴリズム)
     ├── 03-milestones.md      ← 実装マイルストーン M0〜M6(受け入れ基準+実装プロンプト付き)
-    └── 04-setup-guide.md     ← α7C II / FileZilla / ルーター / Lightroom の設定手順
+    ├── 04-setup-guide.md     ← α7C II / FileZilla / ルーター / Lightroom の設定手順
+    └── 05-productization.md  ← 製品化ロードマップ(ライセンス判定表・機種プロファイル・販売チャネル)
 ```
 
 ## この設計書の使い方(実装を担当するAIモデルへ)

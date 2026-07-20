@@ -31,8 +31,8 @@
 ## M1: プロジェクト骨格+ingest+DB(コードの土台)
 
 **実装プロンプト**:
-- pyproject.toml(deps は spec 冒頭の通り、Phase 3 依存の torch/open_clip/sklearn は
-  optional-dependencies `[ml]` に分離)、`bps/config.py`、`bps/db.py`、`bps/ingest.py`、
+- pyproject.toml(deps は spec 冒頭の通り。torch/open_clip は開発スクリプト専用の
+  optional-dependencies `[dev-ml]` に分離し、ランタイム依存に入れない。sklearn は `[ml]`)、`bps/config.py`、`bps/db.py`、`bps/ingest.py`、
   `bps/cli.py` の `init` / `status` / `ingest`(グループ化なし版)を実装。
 - spec §3 のスキーマ、§4 の検証/リネーム/状態遷移を厳密に実装。
 - tests: 合成 JPEG での ingest 正常系、EOI 欠損ファイルの quarantine 行き、
@@ -46,9 +46,10 @@
 ## M2: グループ化+シャープネス+星確定(AI最小構成)
 
 **実装プロンプト**:
-- spec §5(grouping)、§6.1(露出)、§6.2(主被写体: YOLO11n ONNX。
-  `models/yolo11n.onnx` は `ultralytics` で一度エクスポートするスクリプト
-  `scripts/export_yolo.py` を同梱)、§6.3(シャープネス+セッション校正)、
+- spec §5(grouping)、§6.1(露出)、§6.2(主被写体: RTMDet-nano ONNX。
+  `models/rtmdet_nano.onnx` の取得/変換スクリプト `scripts/fetch_models.py` を同梱。
+  mmdetection の公開済み ONNX または rtmlib 配布物を利用。**Ultralytics は使わない** —
+  docs/01 §6 のライセンス制約)、§6.3(シャープネス+セッション校正)、
   §6.5(星確定。moment は恒等 0.0)を実装。
 - `bps ingest` を「登録→全グループ即確定→スコア→星決定」まで通す。
   この時点では XMP 書き込みはスタブ(DB の rating 更新まで)。
@@ -96,9 +97,9 @@ CPU で 200 枚が 4 分以内。
 ## M5: Phase 3 — 決定的瞬間+カバレッジ保護
 
 **実装プロンプト**:
-- spec §10(train.py: lrcat 抽出→負例チェック→OpenCLIP 埋め込み→LogisticRegression
+- spec §10(train.py: lrcat 抽出→負例チェック→SigLIP2 埋め込み(ONNX)→LogisticRegression
   →GroupKFold レポート)、§6.4 の本実装、§6.5 への moment 合流。
-- グループ内序列の補助特徴: YOLO11n-pose(ONNX)で主被写体のキーポイントを取り、
+- グループ内序列の補助特徴: RTMPose-m(ONNX)で主被写体のキーポイントを取り、
   「手首の高さ」「肘角度」「体幹傾き」を in-group タイブレークに使う
   (keep_score 同率±0.05 のときのみ適用。壊れやすいルールを主判定にしない)。
 - カバレッジ保護(spec §6.5 の拡張): 顔クラスタは Phase 3 では実装せず、
@@ -125,6 +126,9 @@ CPU で 200 枚が 4 分以内。
 (ハートビートが途切れず、帰宅後 finalize で全量が DELIVERED)。
 
 ---
+
+> M6 完了後の製品化トラック(P2: 汎用モデル+カメラプロファイル+内蔵FTP → P3: GUI+
+> インストーラ → P4: 販売)は docs/05-productization.md を参照。
 
 ## Phase 1(ソフト実装ではなく計測作業。M2 と並行可)
 
