@@ -1,0 +1,47 @@
+# baseball-photo-select 実行時設定(コピーして config.yaml として使う)
+# すべてのキーは bps/config.py の dataclass と 1:1 対応。未知キーはエラーにする。
+
+base_dir: "D:/bps"            # 実行時レイアウトのルート(spec §1)
+exiftool_path: "exiftool"     # PATH に無い場合はフルパス
+
+ingest:
+  max_verify_retries: 3       # 完全性検証のリトライ回数(spec §4.1)
+  size_stable_seconds: 2.0    # サイズ不変とみなす観測間隔
+
+grouping:
+  gap_seconds: 2.0            # 連写グループの撮影時刻ギャップ閾値(spec §5.1)
+  quiet_seconds: 120          # 確定に必要な受信静穏時間。bps ingest では 0 に自動上書き
+  gap_wait_max_seconds: 600   # 欠番保留の上限。超えたら WARNING して強行確定(spec §5.2)
+
+subject:                      # 主被写体特定(spec §6.2)
+  yolo_model: "models/yolo11n.onnx"
+  conf_threshold: 0.25
+  center_sigma: 0.35          # フォールバック時の中央加重
+
+sharpness:                    # spec §6.3
+  bootstrap_log10: 2.0        # セッション初期(50枚未満)の暫定閾値
+  reject_pct: 0.15            # これ未満のパーセンタイルを「低シャープ」
+  keeper_pct: 0.50            # これ以上ならベスト以外でも ★3
+
+moment:                       # spec §6.4(Phase 3)
+  classifier: "models/moment_classifier.pkl"   # 無ければ moment=0.0 で縮退
+  clip_model: "ViT-B-32"
+  clip_pretrained: "laion2b_s34b_b79k"
+  star5_threshold: 0.70       # グループ内ベストを ★5 に昇格させる moment 閾値
+
+af:                           # α7C II の AF タグ(M0 で実機確認して確定させる)
+  tag_names:
+    - "MakerNotes:FocusLocation"
+    - "MakerNotes:FlexibleSpotPosition"
+    - "MakerNotes:FocalPlaneAFPointLocation"
+
+deliver:
+  label_reject: "Purple"      # LR のカラーラベルセット(英語名)と一致させること
+
+notify:                       # Phase 4(spec §11)
+  enabled: false
+  topic: ""                   # ntfy.sh のトピック名(推測されにくいランダム文字列にする)
+  interval_seconds: 600
+
+logging:
+  level: "INFO"
