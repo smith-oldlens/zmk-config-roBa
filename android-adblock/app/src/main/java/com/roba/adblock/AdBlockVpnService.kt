@@ -145,20 +145,29 @@ class AdBlockVpnService : VpnService() {
             .setBlocking(true)
 
         val network = currentUnderlyingNetwork()
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (e: Exception) {
-            Log.w(TAG, "could not exclude self from VPN", e)
-        }
-        // Route the user's chosen apps outside the VPN, so they stay unfiltered.
-        // addDisallowedApplication throws if the package is not installed, so
-        // guard each one individually.
-        for (pkg in ExcludedApps.get(this)) {
+        // Opt-in model: only the apps the user picked are routed through the VPN
+        // and ad-filtered. addAllowedApplication is mutually exclusive with
+        // addDisallowedApplication, so once we allow any app, every other app
+        // (including this one) bypasses the VPN automatically.
+        var allowed = 0
+        for (pkg in FilteredApps.get(this)) {
             try {
-                builder.addDisallowedApplication(pkg)
-                Log.i(TAG, "excluded $pkg from VPN")
+                builder.addAllowedApplication(pkg)
+                allowed++
+                Log.i(TAG, "filtering $pkg through VPN")
             } catch (e: Exception) {
-                Log.d(TAG, "excluded app $pkg not installed; skipping")
+                Log.d(TAG, "app $pkg not installed; skipping")
+            }
+        }
+        if (allowed == 0) {
+            // Nothing to filter (empty selection, or all picks uninstalled).
+            // Allow only ourselves so the tunnel is valid but no real app is
+            // affected -- this app makes no ad requests and its own DNS bypasses
+            // the VPN via protected sockets.
+            try {
+                builder.addAllowedApplication(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "could not add self as sole allowed app", e)
             }
         }
 

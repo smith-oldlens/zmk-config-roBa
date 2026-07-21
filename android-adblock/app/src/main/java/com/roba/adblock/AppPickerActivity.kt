@@ -15,10 +15,10 @@ import android.widget.ListView
 import android.widget.TextView
 
 /**
- * Lets the user pick which installed apps are excluded from ad filtering
- * (routed outside the VPN). The selection is persisted via [ExcludedApps] and
- * takes effect the next time the VPN starts; [MainActivity] restarts it on
- * return when it is already running.
+ * Lets the user pick which installed apps are ad-filtered (routed through the
+ * VPN). Checked = blocked; everything unchecked is left completely untouched.
+ * The selection is persisted via [FilteredApps] and takes effect the next time
+ * the VPN starts; [MainActivity] restarts it on return when already running.
  */
 class AppPickerActivity : Activity() {
 
@@ -33,7 +33,7 @@ class AppPickerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_picker)
-        savedSelection = ExcludedApps.get(this)
+        savedSelection = FilteredApps.get(this)
         selected.addAll(savedSelection)
         adapter = AppAdapter()
         findViewById<ListView>(R.id.app_list).adapter = adapter
@@ -64,7 +64,7 @@ class AppPickerActivity : Activity() {
         super.onPause()
         // Persist only real changes; signal MainActivity so it can re-apply.
         if (selected != savedSelection) {
-            ExcludedApps.set(this, HashSet(selected))
+            FilteredApps.set(this, HashSet(selected))
             savedSelection = HashSet(selected)
             setResult(RESULT_OK)
         }
@@ -84,9 +84,9 @@ class AppPickerActivity : Activity() {
             val check = view.findViewById<CheckBox>(R.id.app_check)
             check.isChecked = selected.contains(entry.pkg)
             view.setOnClickListener {
-                val nowExcluded = !selected.contains(entry.pkg)
-                if (nowExcluded) selected.add(entry.pkg) else selected.remove(entry.pkg)
-                check.isChecked = nowExcluded
+                val nowFiltered = !selected.contains(entry.pkg)
+                if (nowFiltered) selected.add(entry.pkg) else selected.remove(entry.pkg)
+                check.isChecked = nowFiltered
             }
             return view
         }
