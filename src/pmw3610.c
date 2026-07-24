@@ -24,10 +24,62 @@
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
 #include "pmw3610.h"
+#include "pmw3610_runtime.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
+// ---------------------------------------------------------------------------
+// 実行時に変更可能な設定（カーソル速度＋加速度プリセット）
+// キーマップ上の &cpi_adjust / &accel_cycle ビヘイビアから呼ばれる。
+// 電源断で失われ、次回起動時は .conf のデフォルト値に戻る。
+// ---------------------------------------------------------------------------
+
+static uint32_t runtime_cpi = CONFIG_PMW3610_CPI;
+
+void pmw3610_cpi_adjust(int32_t delta) {
+    int32_t v = (int32_t)runtime_cpi + delta;
+    if (v < PMW3610_MIN_CPI) {
+        v = PMW3610_MIN_CPI;
+    }
+    if (v > PMW3610_MAX_CPI) {
+        v = PMW3610_MAX_CPI;
+    }
+    runtime_cpi = (uint32_t)v;
+}
+
+#ifdef CONFIG_PMW3610_ACCEL_ENABLE
+enum {
+    ACCEL_PRESET_OFF = 0,
+    ACCEL_PRESET_WEAK,
+    ACCEL_PRESET_MID,
+    ACCEL_PRESET_STRONG,
+    ACCEL_PRESET_COUNT,
+};
+
+static uint8_t runtime_accel_preset = ACCEL_PRESET_STRONG;
+
+static int32_t accel_max_factor_for_preset(uint8_t preset) {
+    int32_t lo = CONFIG_PMW3610_ACCEL_MIN_FACTOR;
+    int32_t hi = CONFIG_PMW3610_ACCEL_MAX_FACTOR;
+    switch (preset) {
+    case ACCEL_PRESET_WEAK:
+        return lo + (hi - lo) * 33 / 100;
+    case ACCEL_PRESET_MID:
+        return lo + (hi - lo) * 66 / 100;
+    case ACCEL_PRESET_STRONG:
+        return hi;
+    default:
+        return lo;
+    }
+}
+
+void pmw3610_accel_cycle(void) {
+    runtime_accel_preset = (runtime_accel_preset + 1) % ACCEL_PRESET_COUNT;
+}
+#else
+void pmw3610_accel_cycle(void) {}
+#endif
 
 //////// Sensor initialization steps definition //////////
 // init is done in non-blocking manner (i.e., async), a //
@@ -611,7 +663,7 @@ static int pmw3610_report_data(const struct device *dev) {
     bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
     case MOVE:
-        set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
+        set_cpi_if_needed(dev, runtime_cpi);
         dividor = CONFIG_PMW3610_CPI_DIVIDOR;
         break;
     case SCROLL:
@@ -717,11 +769,12 @@ static int pmw3610_report_data(const struct device *dev) {
 #endif
 
 #ifdef CONFIG_PMW3610_ACCEL_ENABLE
-    if (input_mode == MOVE) {
+    if (input_mode == MOVE && runtime_accel_preset != ACCEL_PRESET_OFF) {
+        int32_t max_factor = accel_max_factor_for_preset(runtime_accel_preset);
         int32_t speed = abs(x) + abs(y);
         int32_t capped_speed = MIN(speed, CONFIG_PMW3610_ACCEL_SPEED_THRESHOLD);
         int32_t factor = CONFIG_PMW3610_ACCEL_MIN_FACTOR +
-            (CONFIG_PMW3610_ACCEL_MAX_FACTOR - CONFIG_PMW3610_ACCEL_MIN_FACTOR) * capped_speed /
+            (max_factor - CONFIG_PMW3610_ACCEL_MIN_FACTOR) * capped_speed /
                 CONFIG_PMW3610_ACCEL_SPEED_THRESHOLD;
         x = (int16_t)((int32_t)x * factor / 100);
         y = (int16_t)((int32_t)y * factor / 100);
