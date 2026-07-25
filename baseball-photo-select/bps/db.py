@@ -270,6 +270,39 @@ class Database:
             )
         return int(cur.lastrowid)
 
+    def photos_in_group(self, group_id: int) -> list[sqlite3.Row]:
+        return list(
+            self.conn.execute(
+                "SELECT * FROM photos WHERE group_id = ? ORDER BY shot_time, id", (group_id,)
+            )
+        )
+
+    def scores_since(self, session_started_at: float) -> list[str]:
+        """scores_json of every photo scored in the current session (spec §6.3)."""
+        return [
+            row["scores_json"]
+            for row in self.conn.execute(
+                "SELECT scores_json FROM photos WHERE scores_json IS NOT NULL "
+                "AND received_at >= ?",
+                (session_started_at,),
+            )
+        ]
+
+    def set_scores(self, photo_id: int, scores_json: str) -> None:
+        """Store raw scores without changing state (two-pass calibration)."""
+        with self.conn:
+            self.conn.execute(
+                "UPDATE photos SET scores_json = ?, updated_at = ? WHERE id = ?",
+                (scores_json, time.time(), photo_id),
+            )
+
+    def close_group(self, group_id: int, best_photo_id: int | None, when: float | None = None) -> None:
+        with self.conn:
+            self.conn.execute(
+                "UPDATE groups SET finalized_at = ?, best_photo_id = ? WHERE id = ?",
+                (time.time() if when is None else when, best_photo_id, group_id),
+            )
+
     def open_groups(self) -> list[sqlite3.Row]:
         return list(
             self.conn.execute("SELECT * FROM groups WHERE finalized_at IS NULL ORDER BY id")

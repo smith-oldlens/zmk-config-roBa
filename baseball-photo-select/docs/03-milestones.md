@@ -60,6 +60,15 @@
 **受け入れ基準**: `pytest`(slow 含む)緑。合成 200 枚のグループ判定・星分布が仕様通り。
 CPU で 200 枚が 4 分以内。
 
+> **実装状況(2026-07)**: 検出器以外は実装済み。§5 / §6.1 / §6.3 / §6.5 と
+> `bps finalize` / `bps calibrate` が動作し、200 枚(1200x800)を 3.7 秒で処理。
+> **§6.2 の RTMDet-nano のみ未着手** — このリポジトリの実行環境から
+> モデル配布元(`download.openmmlab.com` / GitHub releases)へ到達できないため。
+> 現状は人物ゼロ検出時と同じ「画像中央 40% クロップ」経路で動作し、
+> `scores_json` に `"subject_fallback": "no_detector"` が記録される。
+> 検出器は `bps/scoring/subject.py` の `PersonDetector` プロトコルに差し込むだけでよく、
+> 選定ロジック(AF 点優先・中央加重フォールバック)は実装・テスト済み。
+
 ---
 
 ## M3: メタデータ I/O+配送(Lightroom 接続=Phase 2 完成)

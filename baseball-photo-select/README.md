@@ -13,11 +13,18 @@ baseball-photo-select/
 ├── README.md                 ← このファイル
 ├── pyproject.toml            ← [M1] パッケージ定義(bps コマンド)
 ├── config.example.yaml       ← 実行時設定の完全な仕様(コピーして config.yaml にする)
-├── bps/                      ← [M1 実装済] 本体パッケージ
-│   ├── config.py             ← 設定ロード+厳格な検証
-│   ├── db.py                 ← SQLite 状態機械(spec §2/§3)
-│   ├── ingest.py             ← 完全性検証・リネーム・登録(spec §4)
-│   ├── cli.py                ← init / ingest / status
+├── bps/                      ← 本体パッケージ
+│   ├── config.py             ← [M1] 設定ロード+厳格な検証
+│   ├── db.py                 ← [M1] SQLite 状態機械(spec §2/§3)
+│   ├── ingest.py             ← [M1] 完全性検証・リネーム・登録(spec §4)
+│   ├── grouping.py           ← [M2] 連写グループ化・確定判定(spec §5)
+│   ├── scoring/              ← [M2] 採点(spec §6)
+│   │   ├── exposure.py       ←   露出破綻(唯一の無条件除外)
+│   │   ├── subject.py        ←   主被写体選定(検出器は未接続=中央クロップで動作)
+│   │   ├── sharpness.py      ←   被写体シャープネス+セッション内校正
+│   │   ├── moment.py         ←   決定的瞬間(M5 まで 0.0 で縮退)
+│   │   └── composite.py      ←   星の確定と採点ラン
+│   ├── cli.py                ← init / ingest / status / finalize / calibrate
 │   └── log.py                ← ローテーティングログ
 ├── docs/
 │   ├── 01-architecture.md    ← 確定した全体設計(なぜこの形か、変更禁止事項)
@@ -44,20 +51,30 @@ baseball-photo-select/
   補助スクリプト(`scripts/`)、自動テスト。
   → **人間の作業待ち**: チェックリストを実施(Lightroom への星反映確認+実機 α7C II の AF タグ確認)。
 - **M1 実装済**: config / DB 状態機械 / ingest / CLI(`init`, `ingest`, `status`)。
-  **pytest 71 件パス**。受け入れ基準の実測: 合成 100 枚のカード取り込みが **0.5 秒**(予算 5 秒)、
+  受け入れ基準の実測: 合成 100 枚のカード取り込みが **0.5 秒**(予算 5 秒)、
   `bps status` が VERIFIED=100、カード原本は無傷、破損ファイルは削除されず quarantine/ へ。
   3 回連続実行しても状態が変わらない(冪等)。
-- M2 以降: 未着手(docs/03 参照)。
+- **M2 実装済(検出器を除く)**: 連写グループ化・露出判定・被写体シャープネス+セッション内校正・
+  星の確定、`bps finalize` / `bps calibrate`。受け入れ基準の実測: 合成 **200 枚を 3.7 秒**(予算 4 分)。
+  **未着手は §6.2 の RTMDet-nano のみ**(この環境からモデル配布元へ到達不可)。
+  現状は「画像中央 40% クロップ」経路で動作し、検出器は `PersonDetector` プロトコルに
+  差し込むだけでよい(選定ロジックは実装・テスト済み)。docs/03 M2 の注記参照。
+- **テスト: pytest 128 件パス**。
+- M3 以降: 未着手(docs/03 参照)。**M3 の前に M0 の実機確認が必要**
+  (AF タグ形式と Lightroom への星反映)。
 
-### 使い方(M1 時点)
+### 使い方(M2 時点)
 
 ```bash
-pip install -e .              # または: pip install pyyaml piexif
+pip install -e .              # または: pip install pyyaml piexif opencv-python-headless numpy
 cp config.example.yaml config.yaml   # base_dir を自分の環境に合わせる
 bps init                      # base_dir 配下のフォルダと DB を作成
-bps ingest E:/DCIM/100MSDCF   # カードから取り込み(原本は消さない)
+bps ingest E:/DCIM/100MSDCF   # 取り込み→グループ化→採点まで一括(カード原本は消さない)
 bps status                    # 状態別の枚数を表示
+bps calibrate --sample <過去の試合フォルダ>   # 閾値校正用のシャープネス分布を出す
 ```
+
+現時点では**星は DB 内にとどまります**。ファイルへの XMP 書き込みと Lightroom への配送は M3。
 
 ## この設計書の使い方(実装を担当するAIモデルへ)
 

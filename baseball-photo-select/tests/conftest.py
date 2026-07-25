@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bps.config import Config  # noqa: E402  (path set up above)
 
 PIL = pytest.importorskip("PIL", reason="Pillow needed to synthesise test JPEGs")
-from PIL import Image, ImageDraw  # noqa: E402
+from PIL import Image, ImageDraw, ImageFilter  # noqa: E402
 
 
 def write_jpeg(
@@ -28,13 +28,22 @@ def write_jpeg(
     size: tuple[int, int] = (320, 240),
     sharp: bool = True,
     fill: tuple[int, int, int] = (90, 110, 140),
+    blur: float = 0.0,
 ) -> Path:
-    """Write a JPEG with EXIF DateTimeOriginal/SubSecTimeOriginal set to `stamp`."""
+    """Write a JPEG with EXIF DateTimeOriginal/SubSecTimeOriginal set to `stamp`.
+
+    `sharp=False` (or `blur`) produces a frame the sharpness stage should rank
+    low; a flat `fill` of black or white produces an exposure blowout.
+    """
     img = Image.new("RGB", size, fill)
     if sharp:
         draw = ImageDraw.Draw(img)
         for x in range(0, size[0], 16):
             draw.line((x, 0, x, size[1]), fill=(255, 255, 255), width=2)
+        for y in range(0, size[1], 16):
+            draw.line((0, y, size[0], y), fill=(20, 20, 20), width=2)
+    if blur > 0:
+        img = img.filter(ImageFilter.GaussianBlur(radius=blur))
     exif = {
         "0th": {piexif.ImageIFD.Make: b"SONY", piexif.ImageIFD.Model: b"ILCE-7CM2"},
         "Exif": {
