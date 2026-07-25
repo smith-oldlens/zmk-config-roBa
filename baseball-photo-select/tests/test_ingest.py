@@ -117,12 +117,25 @@ def test_ingest_from_card_copies_and_leaves_original(cfg, database, card_dir):
 
 
 def test_raw_files_staged_not_registered(cfg, database):
-    """ARWs are kept for the later selective copy but never scored (spec §4.2)."""
+    """ARWs arriving in our own inbox are filed aside, never scored (spec §4.2)."""
     raw = cfg.inbox_dir / "DSC00001.ARW"
     raw.write_bytes(b"\x00" * 128)
     assert ingest_file(raw, cfg, database, wait_stable=False) is None
     assert (cfg.arw_dir / "DSC00001.ARW").is_file()
     assert sum(database.counts_by_state().values()) == 0
+
+
+def test_raw_on_an_external_source_is_left_alone(cfg, database, card_dir):
+    """Copying a shoot's RAWs would mean tens of GB for files export-raw can
+    read from the card directly."""
+    (card_dir / "DSC00001.ARW").write_bytes(b"\x00" * 128)
+    write_burst(card_dir, 1)
+
+    result = ingest_dir(card_dir, cfg, database)
+
+    assert result.raw_in_place == 1 and result.raw_moved == 0
+    assert (card_dir / "DSC00001.ARW").is_file(), "source RAW must stay put"
+    assert list(cfg.arw_dir.iterdir()) == [], "no RAW should be copied into work/"
 
 
 def test_other_extensions_ignored(cfg, database):
@@ -219,7 +232,8 @@ def test_ingest_dir_reports_mixed_content(cfg, database, card_dir):
     (card_dir / "DSC08888.JPG").write_bytes(b"garbage")
 
     result = ingest_dir(card_dir, cfg, database)
-    assert (result.registered, result.raw_moved, result.ignored, result.quarantined) == (3, 1, 1, 1)
+    # raw_in_place, not raw_moved: the card's ARW is read from where it lies.
+    assert (result.registered, result.raw_in_place, result.ignored, result.quarantined) == (3, 1, 1, 1)
 
 
 def test_ingest_dir_rejects_non_directory(cfg, database, tmp_path):

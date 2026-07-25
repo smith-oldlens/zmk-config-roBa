@@ -41,12 +41,16 @@ class IngestResult:
     skipped_duplicate: int = 0
     quarantined: int = 0
     raw_moved: int = 0
+    raw_in_place: int = 0
     ignored: int = 0
 
     def __str__(self) -> str:
+        raw = f"raw={self.raw_moved}"
+        if self.raw_in_place:
+            raw += f" raw_in_place={self.raw_in_place}"
         return (
             f"registered={self.registered} duplicate={self.skipped_duplicate} "
-            f"quarantined={self.quarantined} raw={self.raw_moved} ignored={self.ignored}"
+            f"quarantined={self.quarantined} {raw} ignored={self.ignored}"
         )
 
 
@@ -303,7 +307,15 @@ def ingest_file(
     suffix = path.suffix.lower()
 
     if suffix in RAW_EXTS:
-        # RAWs are kept aside for the later selective copy; they are not scored.
+        # RAWs are never scored — only the JPEG is. When the source is external
+        # (a card or an archive drive) the RAW is left exactly where it is:
+        # copying a shoot's worth of ARW would mean tens of gigabytes for files
+        # `bps export-raw` can read straight from the source anyway. Only RAWs
+        # that arrived inside our own inbox get filed into work/arw/.
+        if not move:
+            log.debug("RAW left in place at the source: %s", path.name)
+            result.raw_in_place += 1
+            return None
         dest = cfg.arw_dir / path.name
         if dest.exists():
             log.debug("RAW already staged, skipping: %s", path.name)
