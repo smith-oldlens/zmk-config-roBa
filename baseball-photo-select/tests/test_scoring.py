@@ -328,7 +328,8 @@ def test_scores_json_records_the_evidence(cfg, database, card_dir):
 
     payload = json.loads(database.photos_in_state(dbmod.SCORED)[0]["scores_json"])
     assert {"exposure_ok", "sharp_raw", "subj_sharp", "subj_box", "moment"} <= set(payload)
-    assert payload["subject_fallback"] == "no_detector"
+    # Synthetic fixtures carry no Sony MakerNotes, so there is no AF data.
+    assert payload["subject_source"] == "no_detector"
 
 
 def test_score_photo_skips_measurement_for_blown_frame(cfg):

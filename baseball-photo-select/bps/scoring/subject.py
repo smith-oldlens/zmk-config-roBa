@@ -19,6 +19,13 @@ from typing import Callable, Protocol, Sequence
 import numpy as np
 
 CENTER_CROP_FRACTION = 0.40  # spec §6.2 step 4
+#: The camera's AF frame is tiny — eye tracking reports ~285x417 px on a
+#: 7008x4672 frame. Measuring a box that small against other photos' much larger
+#: crops would compare different spatial scales, so the AF box is grown to at
+#: least this fraction of the short edge. It stays centred on the AF point, so
+#: it still covers the tracked player's head and shoulders rather than the
+#: middle of the frame.
+AF_BOX_MIN_FRACTION = 0.20
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,29 @@ def center_box(image: np.ndarray, fraction: float = CENTER_CROP_FRACTION) -> Box
     w = max(1, int(width * fraction))
     h = max(1, int(height * fraction))
     return Box((width - w) // 2, (height - h) // 2, w, h)
+
+
+def box_around(
+    image: np.ndarray,
+    point: tuple[float, float],
+    frame: tuple[int, int] | None = None,
+    min_fraction: float = AF_BOX_MIN_FRACTION,
+) -> Box:
+    """A measurement box centred on the AF point, clamped inside the image.
+
+    `frame` is the camera's own AF frame size when known; it is only ever grown,
+    never shrunk, so every photo is measured at a comparable spatial scale.
+    """
+    height, width = image.shape[:2]
+    minimum = max(1, int(min(width, height) * min_fraction))
+    w = max(minimum, frame[0] if frame else 0)
+    h = max(minimum, frame[1] if frame else 0)
+    w, h = min(w, width), min(h, height)
+    x = int(round(point[0] - w / 2))
+    y = int(round(point[1] - h / 2))
+    x = max(0, min(x, width - w))
+    y = max(0, min(y, height - h))
+    return Box(x, y, w, h)
 
 
 def select_subject(
@@ -100,19 +130,31 @@ def find_subject(
     af_point: tuple[float, float] | None = None,
     detector: PersonDetector | Callable[[np.ndarray], Sequence[Box]] | None = None,
     center_sigma: float = 0.35,
+    af_frame: tuple[int, int] | None = None,
 ) -> tuple[Box, str]:
     """Locate the subject, always returning a measurable box.
 
-    The second element is the fallback reason ('af', 'center_weighted',
-    'center' or 'no_detector'); 'center'/'no_detector' mean the returned box is
-    the centre crop rather than a real detection.
+    The second element records how the box was chosen:
+      'af'             - a detected person containing the AF point
+      'center_weighted'- geometry, because the AF point matched no detection
+      'af_box'         - built from the AF coordinates alone (no detector)
+      'center'         - detector found nobody
+      'no_detector'    - no detector and no usable AF data
+
+    With no detector wired up, the camera's own AF position still identifies the
+    subject far better than the centre of the frame does — on the α7C II it is
+    typically the tracked player's eye (docs/OPEN_QUESTIONS.md, M0).
     """
     height, width = image.shape[:2]
     if detector is None:
+        if af_point is not None:
+            return box_around(image, af_point, af_frame), "af_box"
         return center_box(image), "no_detector"
 
     boxes = list(detector(image))
     box, reason = select_subject(boxes, af_point, (width, height), center_sigma)
     if box is None:
+        if af_point is not None:
+            return box_around(image, af_point, af_frame), "af_box"
         return center_box(image), "center"
     return box, reason

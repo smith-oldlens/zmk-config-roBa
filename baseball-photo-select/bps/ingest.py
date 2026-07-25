@@ -23,6 +23,7 @@ import piexif
 from . import db as dbmod
 from .config import Config
 from .log import get_logger
+from .metadata import MetadataTool
 
 log = get_logger("bps.ingest")
 
@@ -291,6 +292,7 @@ def ingest_file(
     wait_stable: bool = True,
     move: bool = True,
     result: IngestResult | None = None,
+    metadata: "MetadataTool | None" = None,
 ) -> int | None:
     """Verify, rename and register one JPEG. Returns the photo id, or None.
 
@@ -355,7 +357,17 @@ def ingest_file(
         arw_name=arw_name_for(path.name),
     )
     _transfer(path, cfg.work_dir / new_name, move=move)
-    database.transition(photo_id, dbmod.RECEIVED, dbmod.VERIFIED)
+
+    # Read AF data now, while the file is still exactly as the camera wrote it.
+    # Any later XMP write shifts MakerNotes offsets and loses it for good
+    # (docs/01 invariant 1), so this must never move after the rating step.
+    af_json = None
+    if metadata is not None:
+        region = metadata.read_af_region(cfg.work_dir / new_name)
+        if region is not None:
+            af_json = region.to_dict()
+
+    database.transition(photo_id, dbmod.RECEIVED, dbmod.VERIFIED, af_json=af_json)
     result.registered += 1
     return photo_id
 
@@ -403,14 +415,23 @@ def ingest_dir(
     entries = sorted(p for p in source_dir.iterdir() if p.is_file())
     result = IngestResult()
     total = len(entries)
-    for index, entry in enumerate(entries, start=1):
-        try:
-            ingest_file(
-                entry, cfg, database, wait_stable=wait_stable, move=move, result=result
-            )
-        except Exception as exc:  # one bad file must not stop the run
-            log.exception("ingest failed for %s: %s", entry.name, exc)
-        if progress and (index % 25 == 0 or index == total):
-            print(f"  {index}/{total} files processed ({result})", flush=True)
+    with MetadataTool(cfg) as metadata:
+        if not metadata.available:
+            log.warning("running without exiftool: AF data unavailable, subject falls back to centre")
+        for index, entry in enumerate(entries, start=1):
+            try:
+                ingest_file(
+                    entry,
+                    cfg,
+                    database,
+                    wait_stable=wait_stable,
+                    move=move,
+                    result=result,
+                    metadata=metadata,
+                )
+            except Exception as exc:  # one bad file must not stop the run
+                log.exception("ingest failed for %s: %s", entry.name, exc)
+            if progress and (index % 25 == 0 or index == total):
+                print(f"  {index}/{total} files processed ({result})", flush=True)
     log.info("ingest of %s complete: %s", source_dir, result)
     return result

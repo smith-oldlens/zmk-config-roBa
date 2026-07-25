@@ -211,7 +211,19 @@ work/arw/ へ move するだけで DB 登録しない(選抜コピーの照合�
 `pyexiftool.ExifToolHelper` を watch/ingest プロセスで 1 インスタンス保持。
 起動オプション: `-n`(数値出力)。すべての読み書きはこのインスタンス経由。
 
-### 7.2 AF 位置読み出し `read_af_point(path) -> AfPoint | None`
+### 7.2 AF 位置読み出し `MetadataTool.read_af_region(path) -> AfRegion | None`
+
+> **M0 で実機確認済み(α7C II)**。`FocusLocation` は "W H X Y"、加えて
+> **`FocusFrameSize`(例 285x417)も取得可能**で、AF は点でなく**矩形**として得られる。
+> `AFAreaMode` は実運用で `Human Eye Tracking`(選手の瞳を追尾)。
+> → **人物検出器なしでも被写体領域が確定できる**ため、ingest 時に AF を読んで
+> `af_json` に保存し、採点時の主被写体として使う(実装済み)。詳細と実測値は
+> docs/OPEN_QUESTIONS.md。
+>
+> **スケーリング規則**: 座標は `FocusLocation` の W H を基準とする。解析対象画像が
+> 別サイズなら比率で換算するが、**アスペクト比が 1% 以上ずれる場合はクロップされたと見なし
+> AF 情報を破棄する**(ずれた座標を当てると別人を測るため)。
+
 - **必ず XMP 書き込み前に呼ぶ**(01-architecture の変更禁止事項)。
 - config の `af.tag_names`(M0 で実機確認して確定。既定候補順:
   `MakerNotes:FocusLocation` → `MakerNotes:FlexibleSpotPosition` → `MakerNotes:FocalPlaneAFPointLocation`)

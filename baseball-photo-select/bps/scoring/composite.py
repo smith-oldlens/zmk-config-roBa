@@ -23,6 +23,7 @@ from ..log import get_logger
 from . import sharpness as sharpmod
 from .exposure import exposure_ok
 from .moment import moment_score
+from ..metadata import AfRegion
 from .subject import Box, PersonDetector, find_subject
 
 log = get_logger("bps.scoring")
@@ -45,7 +46,7 @@ class PhotoScore:
     sharp_pct: float = 0.0
     moment: float = 0.0
     subject_box: list[int] = field(default_factory=list)
-    subject_fallback: str = ""
+    subject_source: str = ""
     keep_score: float = 0.0
     in_group_rank: int = 0
     rating: int | None = None
@@ -63,8 +64,10 @@ class PhotoScore:
             "in_group_rank": self.in_group_rank,
             "keep_score": round(self.keep_score, 4),
         }
-        if self.subject_fallback:
-            payload["subject_fallback"] = self.subject_fallback
+        if self.subject_source:
+            # How the measured box was chosen ('af', 'af_box', 'center'...), so
+            # a surprising rating can be traced back to what was measured.
+            payload["subject_source"] = self.subject_source
         return json.dumps(payload, ensure_ascii=False)
 
 
@@ -87,7 +90,7 @@ def score_photo(
     photo_id: int,
     new_name: str,
     cfg: Config,
-    af_point: tuple[float, float] | None = None,
+    af_region: AfRegion | None = None,
     detector: PersonDetector | None = None,
 ) -> PhotoScore:
     """Everything measurable from one frame alone; percentiles come later."""
@@ -96,9 +99,17 @@ def score_photo(
     if not score.exposure_ok:
         return score
 
-    box, fallback = find_subject(image, af_point, detector, cfg.subject.center_sigma)
+    af_point = af_region.point if af_region else None
+    af_frame = (
+        (af_region.frame_w, af_region.frame_h)
+        if af_region and af_region.frame_w and af_region.frame_h
+        else None
+    )
+    box, source = find_subject(
+        image, af_point, detector, cfg.subject.center_sigma, af_frame=af_frame
+    )
     score.subject_box = box.as_list()
-    score.subject_fallback = "" if fallback in ("af", "center_weighted") else fallback
+    score.subject_source = source
     score.sharp_raw = sharpmod.raw_sharpness(image, box)
     score.moment = moment_score(image, cfg.moment.classifier)
     return score
@@ -168,8 +179,13 @@ def _session_distribution(database: dbmod.Database, session_started_at: float) -
     return values
 
 
-def _af_point_from_row(row: sqlite3.Row) -> tuple[float, float] | None:
-    """AF coordinates recorded by M3; absent (and so None) until then."""
+def af_region_for(row: sqlite3.Row, image: np.ndarray) -> AfRegion | None:
+    """The AF region recorded at ingest, mapped onto this image.
+
+    Returns None when the camera reported no AF point (Sony writes the image
+    centre in that case) or when the image no longer matches the frame the
+    coordinates refer to, e.g. it was cropped after export.
+    """
     blob = row["af_json"]
     if not blob:
         return None
@@ -177,14 +193,11 @@ def _af_point_from_row(row: sqlite3.Row) -> tuple[float, float] | None:
         data = json.loads(blob)
     except json.JSONDecodeError:
         return None
-    if data.get("center_suspect"):
-        # Sony writes the image centre when it has no AF point (spec §7.2), so
-        # this is "no data", not "focused dead centre".
+    region = AfRegion.from_dict(data)
+    if region is None or region.center_suspect:
         return None
-    x, y = data.get("x"), data.get("y")
-    if isinstance(x, (int, float)) and isinstance(y, (int, float)):
-        return float(x), float(y)
-    return None
+    height, width = image.shape[:2]
+    return region.scaled_to(width, height)
 
 
 def finalize_ready_groups(
@@ -231,7 +244,7 @@ def finalize_ready_groups(
                 int(row["id"]),
                 row["new_name"],
                 cfg,
-                af_point=_af_point_from_row(row),
+                af_region=af_region_for(row, image),
                 detector=detector,
             )
             database.set_scores(score.photo_id, score.to_json())

@@ -5,12 +5,57 @@
 
 ## M0 で確定させる(着手前ブロッカー)
 
-- [ ] **α7C II の AF タグ実形式**: `exiftool -j -G -Sony:All -Composite:All` の実出力から
-      FocusLocation 系タグの実名・値形式を確認し、config.example.yaml の `af.tag_names` と
-      spec §7.2 のパース仕様を実測値で更新する。サンプル JSON を docs/af-tag-samples/ に保存。
-      (AF-C ワイド / トラッキング / スポット の各モードで 1 枚ずつ確認すること)
+- [x] **α7C II の AF タグ実形式** — **確認済み(2026-07、実機の少年野球撮影データ)**。結果は下記。
 - [ ] **教師データの成立確認**: 全ショット(不採用含む)が残っている過去試合の数: ____ 試合
       → 正例 500 枚未満なら Phase 3 は当面ポーズ/ボール特徴主体に切替(spec §10.1 の警告条件)。
+
+## M0 の実測結果: α7C II の AF メタデータ(2026-07 確認)
+
+実機(少年野球の試合、AF-C・ワイド)の 3 枚で `exiftool -G1 <file> | grep -i focus` を実行した結果:
+
+```
+[Sony] Focus Mode           : AF-C
+[Sony] AF Area Mode Setting : Wide
+[Sony] AF Area Mode         : Human Eye Tracking     ← 実際に効いていたモード
+[Sony] Focus Location       : 7008 4672 4259 2044    ← W H X Y(左上原点)
+[Sony] Focus Frame Size     : 285x417                ← AF 枠の実サイズ
+[Sony] Full Image Size      : 7008x4672
+[Sony] Focus Position 2     : 198
+[Composite] Focus Distance 2: 8.637 m
+```
+
+確定事項:
+
+1. **`FocusLocation` は α7C II で確実に取れる。形式は仕様どおり "W H X Y"**(左上原点)。
+   exiftool のグループは family 0 で `MakerNotes`、family 1 で `Sony`。
+   config の `MakerNotes:FocusLocation` で正しく引ける。
+2. **座標は実際に被写体を指しており、中心フォールバックではない**。
+   実測 2 枚は中心から 10.8% / 14.9% ずれており、`center_suspect` の ±1% 判定は妥当。
+3. **`FocusFrameSize`(285x417 等)も取れる** → AF は点ではなく**矩形**として得られる。
+   → **人物検出器(RTMDet)なしでも被写体領域が確定できる**。M2 で残していた
+   「検出器がないので中央 40% クロップ」の穴は、この AF 枠で大幅に埋まる。
+4. **`AFAreaMode: Human Eye Tracking`** — 座標は選手の瞳の上。主被写体の手がかりとして最良。
+   ワイド設定でもカメラ側が瞳追尾に切り替わるため、実運用では高頻度でこれが得られる見込み。
+5. 併せて `FocusDistance2`(被写体距離)も取得可能。将来の特徴量候補。
+
+**注意(実装済みの防御)**: 検証に使ったのは現像書き出し済み JPEG で、
+`Composite:ImageSize` が 7168x5120 と `FocusLocation` の基準枠 7008x4672 に一致しなかった
+(書き出し時のクロップ/リサイズ)。パイプラインが扱うのは撮って出し JPEG なので通常は一致するが、
+**アスペクト比が食い違う場合は座標をスケールせず AF 情報なしとして扱う**(クロップされた画像に
+元座標を当てると別人を測るため)。
+
+### 未解決: 測定クロップのスケール不整合(Phase 1 の校正で判断する)
+
+`raw_sharpness` はクロップを長辺 512px に縮小してから Laplacian を取る。縮小率が違うと
+同じシャープさでも値がずれる(強く縮小するほど平滑化されて低く出る)ため、
+**AF 由来のクロップ(短辺の 20%)と AF なしの中央クロップ(40%)が混在するセッションでは
+系統的なバイアスが生じうる**。
+
+- α7C II は実測でほぼ全フレームに AF 情報を持つため、混在は稀(center_suspect の時のみ)。
+- 対処案 A: 中央フォールバックも 20% に揃える(比較可能性を優先、被写体を外す危険は増す)。
+- 対処案 B: 現状維持し、Phase 1(自分の手動セレクトとの突合)で実害の有無を確認する。
+- **判断は Phase 1 の実測後**。それまでは B。`scores_json` の `subject_source` に
+  どちらの経路で測ったか記録済みなので、後から層別集計できる。
 
 ## 実装中に確定させた仕様解釈(記録)
 
