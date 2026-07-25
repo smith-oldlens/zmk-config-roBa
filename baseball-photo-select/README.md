@@ -20,11 +20,13 @@ baseball-photo-select/
 │   ├── grouping.py           ← [M2] 連写グループ化・確定判定(spec §5)
 │   ├── scoring/              ← [M2] 採点(spec §6)
 │   │   ├── exposure.py       ←   露出破綻(唯一の無条件除外)
-│   │   ├── subject.py        ←   主被写体選定(検出器は未接続=中央クロップで動作)
+│   │   ├── subject.py        ←   主被写体選定(カメラの AF 位置を使用。検出器は未接続)
 │   │   ├── sharpness.py      ←   被写体シャープネス+セッション内校正
 │   │   ├── moment.py         ←   決定的瞬間(M5 まで 0.0 で縮退)
 │   │   └── composite.py      ←   星の確定と採点ラン
-│   ├── cli.py                ← init / ingest / status / finalize / calibrate
+│   ├── metadata.py           ← [M3] exiftool 常駐・AF 読み出し・XMP 書き込み(spec §7)
+│   ├── deliver.py            ← [M3] 配送・ARW サイドカー・選抜リスト(spec §7.4)
+│   ├── cli.py                ← init/ingest/status/finalize/calibrate/deliver/export-raw
 │   └── log.py                ← ローテーティングログ
 ├── docs/
 │   ├── 01-architecture.md    ← 確定した全体設計(なぜこの形か、変更禁止事項)
@@ -61,21 +63,29 @@ baseball-photo-select/
   ingest 時に AF を読み(XMP 書き込み前に必ず実行)、採点時の主被写体として使う。
   → **人物検出モデルなしでも「背景ボケ」と「被写体ブレ」を区別できる**。
   未着手は §6.2 の RTMDet-nano のみで、足せば精度がさらに上がる位置づけ。
-- **テスト: pytest 154 件パス**。
-- M3 以降: 未着手(docs/03 参照)。**M0 の残り(Lightroom への星反映確認)は未実施**。
+- **M3 実装済**: 星の XMP 書き込み(書き戻し検証つき)・Lightroom 監視フォルダへの配送・
+  ★3 以上の ARW サイドカー生成と選抜リスト・`bps export-raw`。
+  **これで「カードを挿す → 星付きで Lightroom に並ぶ」が通ります。**
+- **テスト: pytest 172 件パス**。
+- M4(常駐監視・現場無線運用)以降は未着手。**M0 の残り(実 Lightroom での星反映確認)も未実施** —
+  M3 が完成したので、合成画像ではなく実際の試合写真でそのまま確認できます。
 
-### 使い方(M2 時点)
+### 使い方(現在)
 
 ```bash
-pip install -e .              # または: pip install pyyaml piexif opencv-python-headless numpy
+brew install exiftool                # Mac。Windows は exiftool.org から
+pip install -e .
 cp config.example.yaml config.yaml   # base_dir を自分の環境に合わせる
-bps init                      # base_dir 配下のフォルダと DB を作成
-bps ingest E:/DCIM/100MSDCF   # 取り込み→グループ化→採点まで一括(カード原本は消さない)
-bps status                    # 状態別の枚数を表示
-bps calibrate --sample <過去の試合フォルダ>   # 閾値校正用のシャープネス分布を出す
+bps init
+
+# 取り込み→グループ化→採点→星書き込み→Lightroom へ配送まで一括
+bps ingest /Volumes/<CARD>/DCIM/100MSDCF
+
+# 現像したいカットの RAW だけカードから取り出す(カードは読むだけ)
+bps export-raw --card /Volumes/<CARD>/DCIM --dest ~/Photos/raw_selects
 ```
 
-現時点では**星は DB 内にとどまります**。ファイルへの XMP 書き込みと Lightroom への配送は M3。
+Lightroom 側の設定(自動読み込み+スマートコレクション)は `docs/04-setup-guide.md` §5。
 
 ## この設計書の使い方(実装を担当するAIモデルへ)
 
@@ -98,7 +108,9 @@ bps calibrate --sample <過去の試合フォルダ>   # 閾値校正用のシ�
 ## 前提環境
 
 - カメラ: **Sony α7C II**(FTP background transfer / 5GHz 対応。docs/04 参照)
-- PC: Windows ノート PC(Python 3.12)。GPU なしで全機能が動くこと(必須要件)
+- PC: **macOS**(開発者の実環境)。Windows でも動くよう OS 依存を避けて実装。
+  Python 3.11+ / **GPU なしで全機能が動くこと**(必須要件)
+- exiftool(星の読み書き。Mac は `brew install exiftool`)
 - Lightroom Classic(自動読み込み=Auto Import を使用)
 - 費用: Phase 0〜3 は追加費用ゼロ。無線化(Phase 4)のみルーター等 約1.5万円
 

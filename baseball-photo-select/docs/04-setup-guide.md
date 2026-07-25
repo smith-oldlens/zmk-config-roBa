@@ -1,4 +1,21 @@
-# 04. セットアップガイド(α7C II / ネットワーク / FileZilla / Lightroom)
+# 04. セットアップガイド(α7C II / ネットワーク / FTP / Lightroom)
+
+> **対象環境**: 開発者の実環境は **macOS**。以下は Mac を主として書き、Windows は補足に回す。
+> パイプライン本体(`bps` コマンド)は OS 非依存で、違いはツールの入れ方とパス表記だけ。
+
+## 0. 事前準備(Mac)
+
+```bash
+brew install exiftool               # 必須(星の読み書きに使う)
+cd baseball-photo-select
+pip install -e .                    # bps コマンドと依存を導入
+cp config.example.yaml config.yaml  # base_dir を自分のパスに(例 /Users/<name>/bps)
+bps init
+```
+
+Windows の場合: exiftool.org から Windows Executable を落として `exiftool.exe` にリネームし
+PATH に置く。`base_dir` は `D:/bps` のようなドライブ表記にする。
+
 
 ## 1. α7C II カメラ設定
 
@@ -38,23 +55,38 @@ MENU → ネットワーク → FTP転送機能:
 「共有元のネット接続がないと不安定」「無接続アイドルで自動オフ」「パブリック扱いで
 ファイアウォールが FTP を塞ぐ」の 3 つの罠があるため、リハーサルで問題が出たらルーターに移行。
 
-## 3. FileZilla Server(PC 側 FTP 受信)
+## 3. PC 側 FTP 受信(Phase 4)
 
-1. FileZilla Server(無料)をインストール
-2. ユーザー作成 → ホームディレクトリ = `base_dir/inbox/`(書き込み許可)
-3. **「Allow plain FTP」を明示的に有効化**(1.x 系は既定で TLS 必須。
-   これをしないとカメラが接続できない — 現場で最初にハマるポイント)
-4. パッシブポート範囲を固定(例 50000-51000)
-5. Windows Defender ファイアウォール: 受信規則で TCP 21 + 50000-51000 を許可
-   (プライベート/パブリック両プロファイル)
-6. 検証用の最速代替: `python -m pyftpdlib -p 21 -w -d <inbox>`(pyftpdlib)
+**Mac の推奨**: `pyftpdlib`(MIT)を使う。macOS は標準の FTP サーバを廃止しており、
+インストール不要で一行起動できるこれが最も素直:
+
+```bash
+pip install pyftpdlib
+python -m pyftpdlib -p 2121 -w -d /Users/<name>/bps/inbox -u sony -P <password>
+```
+- `-w` = 書き込み許可、`-u/-P` = カメラに入力するユーザー名/パスワード
+- 1024 番未満(21 番)を使うには root 権限が要るため、**2121 番など高いポートを使い、
+  カメラ側の FTP ポートも同じ値にする**のが簡単
+- macOS のファイアウォールが有効なら、初回起動時のダイアログで python の着信接続を許可
+
+Windows の場合: FileZilla Server(無料)。ホームを `base_dir/inbox/` にし、
+**「Allow plain FTP」を明示的に有効化**(1.x 系は既定で TLS 必須。これをしないと
+カメラが繋がらない)。パッシブポート範囲を固定し、Defender の受信規則で 21 番と
+その範囲を許可する。
 
 ## 4. PC 設定(現場運用)
 
-- `scripts/setup_windows.ps1` を実行(M4 で作成): スリープ無効・蓋閉じ動作=何もしない・
-  Windows Update 一時停止・電源プラン最適化
-- 設置: ハードケース内・日陰。**夏場の車内放置は禁止**(60℃ 超で熱停止する)
-- 盗難対策: 人目につかない位置+ケーブルロック
+**Mac**: スリープを止めないと転送も処理も落ちる。`bps watch` を `caffeinate` 経由で起動する:
+```bash
+caffeinate -dimsu bps watch          # 実行中はスリープ/画面オフを抑止
+```
+- 蓋を閉じて運用したい場合は電源接続+外部ディスプレイなしだとスリープするため、
+  蓋は開けたまま伏せない運用にするか、`caffeinate` に加えて「バッテリー使用時に自動スリープしない」を
+  システム設定 > バッテリー で確認する
+- ソフトウェアアップデートの自動再起動を一時停止しておく
+
+**共通**: 設置はハードケース内・日陰。**夏場の車内放置は禁止**(60℃ 超で熱停止する)。
+盗難対策に人目につかない位置+ケーブルロック。
 
 ## 5. Lightroom Classic 設定
 
@@ -79,26 +111,37 @@ MENU → ネットワーク → FTP転送機能:
   (システムは削除しない。ここだけは人間の仕事)
 
 ### RAW の後入れ(帰宅後)
-1. `bps export-raw --card E:\DCIM\100MSDCF --dest D:\Photos\raw_selects\`
-   → ★3 以上の ARW と .xmp サイドカーがコピーされる
-2. LR で `D:\Photos\raw_selects\` を通常読み込み → 星付きで入る
+1. `bps export-raw --card /Volumes/<CARD>/DCIM --dest ~/Photos/raw_selects`
+   → ★3 以上の ARW と .xmp サイドカーだけがコピーされる(カードは読むだけ)
+2. LR で `~/Photos/raw_selects` を通常読み込み → 星付きで入る
 3. JPEG と ARW は別ファイルとしてカタログに載る(JPEG=全量+星、ARW=選抜のみ)。
    現像は ARW 側で行う運用
 
 ## 6. 運用チートシート
 
-### 帰宅後カード運用(Phase 2、基本形)
+### 帰宅後カード運用(Phase 2 — 現在ここまで実装済み)
+```bash
+# 1. カードを挿す(/Volumes/<CARD> にマウントされる)
+# 2. 取り込み→採点→星書き込み→Lightroom監視フォルダへ配送まで一括
+bps ingest /Volumes/<CARD>/DCIM/100MSDCF
+
+# 3. Lightroom を開く → スマートコレクション「AIセレクト」に★3以上が並ぶ
+
+# 4. 現像したいカットの RAW だけカードから取り出す
+bps export-raw --card /Volumes/<CARD>/DCIM --dest ~/Photos/raw_selects
 ```
-1. カードを PC に挿す
-2. bps ingest E:\DCIM\100MSDCF      # 1,000枚 ≈ 20〜35分。数分後から LR に流れ始める
-3. Lightroom を開く → スマートコレクション「AIセレクト」を見る
-4. 必要なら bps export-raw ... で RAW を選抜取り込み
+補足コマンド:
+```bash
+bps status                       # 状態別の枚数・エラー
+bps ingest <dir> --no-deliver    # 星は付けるが Lightroom には渡さない(確認用)
+bps deliver                      # --no-deliver の後で、あらためて配送する
+bps calibrate --sample <過去の試合フォルダ>   # 閾値校正用のシャープネス分布
 ```
 
-### 現場無線運用(Phase 4)
+### 現場無線運用(Phase 4 — 未実装)
 ```
 前夜: 自宅で FTP リハーサル(接続確認+連写バースト到達テスト)
-現場: ルーター起動 → PC 起動(bps watch 自動開始)→ カメラの Wi-Fi 接続確認 → 撮影に集中
+現場: ルーター起動 → caffeinate -dimsu bps watch → カメラの Wi-Fi 接続確認 → 撮影に集中
       スマホに 10 分ごとのハートビート通知が届く(止まったら異常)
 試合後: bps finalize --all → 帰路/帰宅後に LR を開くと完成済み
 ```

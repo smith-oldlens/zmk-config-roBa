@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import db as dbmod
 from .config import Config, ConfigError, load_config
+from .deliver import deliver_scored, export_raws, read_select_list
 from .grouping import group_pending
 from .ingest import JPEG_EXTS, ingest_dir
 from .log import setup_logging
@@ -21,7 +22,6 @@ from .scoring.composite import finalize_ready_groups, load_image
 DEFAULT_CONFIG = "config.yaml"
 _NOT_YET = {
     "watch": "M4",
-    "export-raw": "M3",
     "train": "M5",
 }
 
@@ -68,17 +68,58 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         # A batch source is complete by definition, so there is nothing left to
         # wait for: every group is finalised immediately (spec §5.2).
         summary = finalize_ready_groups(cfg, database, force=True, progress=verbose)
+        delivery = None
+        if not args.no_deliver:
+            delivery = deliver_scored(cfg, database, progress=verbose)
         counts = database.counts_by_state()
+        selected = len(read_select_list(cfg))
 
     print(f"\nIngest complete: {result}")
     print(f"Grouped {grouped} photo(s) into {summary['groups']} burst(s); rated {summary['rated']}.")
+    if delivery is not None:
+        print(f"Delivered {delivery.delivered} photo(s) to {cfg.deliver_dir}")
     print("State counts: " + ", ".join(f"{s}={n}" for s, n in counts.items() if n))
     if result.quarantined:
         print(f"  {result.quarantined} file(s) in {cfg.quarantine_dir} — inspect, nothing deleted.")
     if summary["missing_files"]:
         print(f"  {summary['missing_files']} photo(s) could not be read; see `bps status`.")
-    print("\nRatings are in the database. Writing them into the files and delivering")
-    print("to Lightroom is M3 (`bps export-raw` / deliver) — not implemented yet.")
+    if delivery is not None and delivery.failed:
+        print(f"  {delivery.failed} photo(s) failed to deliver; see `bps status`.")
+    if selected:
+        print(
+            f"\n{selected} RAW(s) selected. Pull them off the card with:\n"
+            f"  bps export-raw --card <card dir> --dest <import folder>"
+        )
+    return 0
+
+
+def cmd_deliver(args: argparse.Namespace) -> int:
+    cfg = _load(args)
+    with _open_db(cfg) as database:
+        result = deliver_scored(cfg, database, progress=not args.quiet)
+    if not (result.delivered or result.failed):
+        print("Nothing scored is waiting for delivery.")
+        return 0
+    print(f"Delivered {result.delivered} photo(s) to {cfg.deliver_dir} ({result})")
+    return 0
+
+
+def cmd_export_raw(args: argparse.Namespace) -> int:
+    cfg = _load(args)
+    card = Path(args.card)
+    if not card.is_dir():
+        print(f"error: not a directory: {card}", file=sys.stderr)
+        return 2
+    result = export_raws(cfg, card, Path(args.dest))
+    print(f"Copied {result.copied} RAW(s) and {result.sidecars} sidecar(s) to {args.dest}")
+    if result.missing:
+        print(f"  {len(result.missing)} selected RAW(s) not found on the card:")
+        for name in result.missing[:10]:
+            print(f"    {name}")
+        if len(result.missing) > 10:
+            print(f"    ... and {len(result.missing) - 10} more")
+    if not result.copied:
+        return 1
     return 0
 
 
@@ -185,8 +226,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init", help="create base_dir layout and initialise the database")
 
     p_ingest = sub.add_parser("ingest", help="batch-ingest a directory (card or inbox)")
-    p_ingest.add_argument("source", help="directory to ingest, e.g. E:/DCIM/100MSDCF")
+    p_ingest.add_argument("source", help="directory to ingest, e.g. /Volumes/CARD/DCIM/100MSDCF")
     p_ingest.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
+    p_ingest.add_argument(
+        "--no-deliver",
+        action="store_true",
+        help="stop after rating; leave the files in work/ instead of handing them to Lightroom",
+    )
 
     sub.add_parser("status", help="show state counts, open groups and recent errors")
 
@@ -199,6 +245,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_cal = sub.add_parser("calibrate", help="report the sharpness distribution of a sample folder")
     p_cal.add_argument("--sample", required=True, help="folder of past photos to measure")
     p_cal.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
+
+    p_del = sub.add_parser("deliver", help="write ratings and move rated photos to Lightroom")
+    p_del.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
+
+    p_raw = sub.add_parser("export-raw", help="copy the selected RAWs off the card with sidecars")
+    p_raw.add_argument("--card", required=True, help="card directory, e.g. /Volumes/CARD/DCIM")
+    p_raw.add_argument("--dest", required=True, help="folder to copy the selected RAWs into")
 
     for name, milestone in _NOT_YET.items():
         sub.add_parser(name, help=f"(not yet implemented — {milestone})")
@@ -214,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
         "status": cmd_status,
         "finalize": cmd_finalize,
         "calibrate": cmd_calibrate,
+        "deliver": cmd_deliver,
+        "export-raw": cmd_export_raw,
     }
     handler = handlers.get(args.command, cmd_unimplemented)
     try:

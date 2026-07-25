@@ -227,8 +227,11 @@ class MetadataTool:
             self._unavailable = True
             return False
         try:
+            # -n: numeric values. -G: group-prefixed keys, so what comes back
+            # matches the tag names written in config (MakerNotes:FocusLocation)
+            # instead of bare names that could collide between groups.
             self._helper = exiftool.ExifToolHelper(
-                executable=self.cfg.exiftool_path, common_args=["-n"]
+                executable=self.cfg.exiftool_path, common_args=["-n", "-G"]
             )
             self._helper.run()
         except Exception as exc:  # exiftool missing or not executable
@@ -259,6 +262,62 @@ class MetadataTool:
             log.debug("exiftool read failed for %s: %s", path.name, exc)
             return {}
         return result[0] if result else {}
+
+    def write_rating(self, path: Path, rating: int, label: str | None = None) -> bool:
+        """Write the star rating into the file and verify it read back (spec §7.3).
+
+        Rating is the pipeline's primary key into Lightroom: it is standard XMP
+        and is picked up at import. The verification matters because a silently
+        failed write would surface as a photo that simply never appears in the
+        select collection, with nothing to explain why.
+        """
+        if not self._start():
+            log.error("cannot write rating without exiftool: %s", path.name)
+            return False
+        args = [f"-XMP-xmp:Rating={int(rating)}"]
+        if label:
+            args.append(f"-XMP-xmp:Label={label}")
+        try:
+            self._helper.execute("-overwrite_original", *args, str(path))
+        except Exception as exc:
+            log.error("rating write failed for %s: %s", path.name, exc)
+            return False
+
+        tags = self.read_tags(path, ["XMP:Rating"])
+        written = _lookup(tags, "XMP:Rating")
+        try:
+            ok = written is not None and int(written) == int(rating)
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            log.error("rating readback mismatch for %s: wrote %s, read %r", path.name, rating, written)
+        return ok
+
+    def write_sidecar(
+        self, sidecar_path: Path, rating: int, label: str | None = None
+    ) -> bool:
+        """Create/replace an XMP sidecar for a RAW file (spec §7.4).
+
+        Lightroom reads sidecars only for RAW files, so this is how a rating
+        reaches an ARW that is still sitting on the card. exiftool builds the
+        sidecar from the tags alone — no source file needed, which matters
+        because the ARW is deliberately not copied yet.
+        """
+        if not self._start():
+            return False
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        if sidecar_path.exists():
+            # -o will not overwrite, so clear the way for a clean regeneration.
+            sidecar_path.unlink()
+        args = [f"-XMP-xmp:Rating={int(rating)}"]
+        if label:
+            args.append(f"-XMP-xmp:Label={label}")
+        try:
+            self._helper.execute("-o", str(sidecar_path), *args)
+        except Exception as exc:
+            log.error("sidecar write failed for %s: %s", sidecar_path.name, exc)
+            return False
+        return sidecar_path.is_file()
 
     def read_af_region(self, path: Path) -> AfRegion | None:
         """AF position for one file. Must be called before any XMP write."""
