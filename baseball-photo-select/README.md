@@ -11,7 +11,14 @@ Lightroom Classic を開いたときにはセレクト済みの写真だけが�
 ```
 baseball-photo-select/
 ├── README.md                 ← このファイル
+├── pyproject.toml            ← [M1] パッケージ定義(bps コマンド)
 ├── config.example.yaml       ← 実行時設定の完全な仕様(コピーして config.yaml にする)
+├── bps/                      ← [M1 実装済] 本体パッケージ
+│   ├── config.py             ← 設定ロード+厳格な検証
+│   ├── db.py                 ← SQLite 状態機械(spec §2/§3)
+│   ├── ingest.py             ← 完全性検証・リネーム・登録(spec §4)
+│   ├── cli.py                ← init / ingest / status
+│   └── log.py                ← ローテーティングログ
 ├── docs/
 │   ├── 01-architecture.md    ← 確定した全体設計(なぜこの形か、変更禁止事項)
 │   ├── 02-spec-pipeline.md   ← 実装仕様書(モジュール/関数シグネチャ/DBスキーマ/アルゴリズム)
@@ -24,6 +31,8 @@ baseball-photo-select/
 │   ├── m0_write_test_stars.py  ← テスト JPEG に星 0/3/5 を書き Lightroom 経路を検証
 │   └── m0_dump_af_tags.py       ← 実機 JPEG から Sony AF タグを抽出・報告
 └── tests/
+    ├── conftest.py           ← [M1] 合成 JPEG フィクスチャ(EXIF 付き)
+    ├── test_config.py / test_db.py / test_ingest.py  ← [M1] 自動テスト
     ├── test_m0_helpers.py    ← M0 ヘルパーの自動テスト(pytest)
     └── manual/
         └── m0-e2e-checklist.md  ← [M0 実装済] 実機 E2E 検証チェックリスト(人間が実施)
@@ -32,9 +41,23 @@ baseball-photo-select/
 ## 進捗
 
 - **M0 実装済**: E2E 検証チェックリスト(`tests/manual/m0-e2e-checklist.md`)と
-  補助スクリプト(`scripts/`)、自動テスト(`tests/test_m0_helpers.py`, 14件パス)。
-  次は**人間が**チェックリストを実施(Lightroom への星反映確認+実機 α7C II の AF タグ確認)。
-- M1 以降: 未着手(docs/03 参照)。
+  補助スクリプト(`scripts/`)、自動テスト。
+  → **人間の作業待ち**: チェックリストを実施(Lightroom への星反映確認+実機 α7C II の AF タグ確認)。
+- **M1 実装済**: config / DB 状態機械 / ingest / CLI(`init`, `ingest`, `status`)。
+  **pytest 71 件パス**。受け入れ基準の実測: 合成 100 枚のカード取り込みが **0.5 秒**(予算 5 秒)、
+  `bps status` が VERIFIED=100、カード原本は無傷、破損ファイルは削除されず quarantine/ へ。
+  3 回連続実行しても状態が変わらない(冪等)。
+- M2 以降: 未着手(docs/03 参照)。
+
+### 使い方(M1 時点)
+
+```bash
+pip install -e .              # または: pip install pyyaml piexif
+cp config.example.yaml config.yaml   # base_dir を自分の環境に合わせる
+bps init                      # base_dir 配下のフォルダと DB を作成
+bps ingest E:/DCIM/100MSDCF   # カードから取り込み(原本は消さない)
+bps status                    # 状態別の枚数を表示
+```
 
 ## この設計書の使い方(実装を担当するAIモデルへ)
 
