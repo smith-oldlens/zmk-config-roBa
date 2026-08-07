@@ -24,7 +24,6 @@ from .metadata import MetadataTool
 log = get_logger("bps.deliver")
 
 SELECT_LIST = "select_list.txt"
-KEEPER_RATING = 3  # ratings at or above this are worth pulling the RAW for
 RAW_EXTS = (".ARW", ".arw")
 
 
@@ -118,8 +117,9 @@ def deliver_photo(
     result.written += 1
 
     # Keepers get their RAW queued before the JPEG moves, so an interruption
-    # leaves a redundant list entry rather than a lost selection.
-    if int(rating) >= KEEPER_RATING:
+    # leaves a redundant list entry rather than a lost selection. The threshold
+    # is the owner's "selected" star (config ratings.keep).
+    if int(rating) >= cfg.ratings.keep:
         arw_name = database.arw_name_for(row["new_name"])
         if arw_name:
             if metadata.write_sidecar(sidecar_path_for(cfg, arw_name), int(rating), label):

@@ -177,61 +177,71 @@ def make_scores(*sharp_pcts: float, moment: float = 0.0) -> list[PhotoScore]:
     ]
 
 
-def test_best_of_burst_gets_three_stars(cfg):
+def test_best_of_burst_gets_keep_star(cfg):
+    """Keep = the owner's own "selected" star (1 in their catalog convention)."""
     scores = make_scores(0.9, 0.3, 0.2)
     best = decide_ratings(scores, cfg)
-    assert best is scores[0] and scores[0].rating == 3
+    assert best is scores[0] and scores[0].rating == cfg.ratings.keep
 
 
-def test_moment_promotes_best_to_five_stars(cfg):
+def test_moment_promotes_best_into_important_band(cfg):
+    """Moment shots enter the owner's 2-5 "important" band, starting at 2."""
     scores = make_scores(0.9, 0.2, moment=0.8)
     decide_ratings(scores, cfg)
-    assert scores[0].rating == 5
+    assert scores[0].rating == cfg.ratings.moment
 
 
-def test_non_best_keeper_also_gets_three_stars(cfg):
+def test_non_best_keeper_also_gets_keep_star(cfg):
     scores = make_scores(0.9, 0.6)
     decide_ratings(scores, cfg)
-    assert scores[1].rating == 3
+    assert scores[1].rating == cfg.ratings.keep
 
 
 def test_soft_frame_rejected_when_alternative_exists(cfg):
     scores = make_scores(0.9, 0.05)
     decide_ratings(scores, cfg)
-    assert scores[1].rating == 1 and scores[1].label == cfg.deliver.label_reject
+    assert scores[1].rating == cfg.ratings.reject
+    assert scores[1].label == cfg.deliver.label_reject
 
 
-def test_middling_frame_is_unrated_not_rejected(cfg):
+def test_middling_frame_goes_to_the_review_bucket(cfg):
+    """Middle ground is exactly what the human reviews: review star + label."""
     scores = make_scores(0.9, 0.3)
     decide_ratings(scores, cfg)
-    assert scores[1].rating == 0 and scores[1].label is None
+    assert scores[1].rating == cfg.ratings.review
+    assert scores[1].label == cfg.deliver.label_review
 
 
 def test_lone_soft_frame_is_never_auto_rejected(cfg):
-    """The only photo of a child must survive even if it is soft (docs/01 §2)."""
+    """The only photo of a child must survive even if it is soft (docs/01 §2).
+
+    It lands in the review bucket so a human decides, rather than being
+    silently rejected or silently kept."""
     scores = make_scores(0.02)
     decide_ratings(scores, cfg)
-    assert scores[0].rating == 0 and scores[0].label is None
+    assert scores[0].rating == cfg.ratings.review
+    assert scores[0].label == cfg.deliver.label_review
 
 
 def test_lone_sharp_frame_still_earns_stars(cfg):
     scores = make_scores(0.8)
     decide_ratings(scores, cfg)
-    assert scores[0].rating == 3
+    assert scores[0].rating == cfg.ratings.keep
 
 
 def test_blown_frame_rejected_regardless_of_group(cfg):
     scores = make_scores(0.9)
     scores[0].exposure_ok = False
     assert decide_ratings(scores, cfg) is None
-    assert scores[0].rating == 1 and scores[0].label == cfg.deliver.label_reject
+    assert scores[0].rating == cfg.ratings.reject
+    assert scores[0].label == cfg.deliver.label_reject
 
 
 def test_blown_frame_does_not_block_the_rest(cfg):
     scores = make_scores(0.9, 0.8)
     scores[0].exposure_ok = False
     best = decide_ratings(scores, cfg)
-    assert best is scores[1] and scores[1].rating == 3
+    assert best is scores[1] and scores[1].rating == cfg.ratings.keep
 
 
 def test_ranks_are_assigned_in_order(cfg):
@@ -244,8 +254,8 @@ def test_all_soft_group_keeps_its_best(cfg):
     """Every frame soft: still surface one rather than rejecting the whole burst."""
     scores = make_scores(0.05, 0.04, 0.03)
     decide_ratings(scores, cfg)
-    assert scores[0].rating == 3
-    assert [s.rating for s in scores[1:]] == [1, 1]
+    assert scores[0].rating == cfg.ratings.keep
+    assert [s.rating for s in scores[1:]] == [cfg.ratings.reject] * 2
 
 
 # --- end-to-end scoring run ----------------------------------------------
@@ -262,7 +272,7 @@ def test_finalize_scores_a_burst(cfg: Config, database, card_dir):
     assert database.counts_by_state()[dbmod.SCORED] == 4
     assert database.count_open_groups() == 0
     ratings = [row["rating"] for row in database.photos_in_state(dbmod.SCORED)]
-    assert max(ratings) >= 3, "a burst must yield at least one keeper"
+    assert max(ratings) >= cfg.ratings.keep, "a burst must yield at least one keeper"
 
 
 def test_finalize_picks_the_sharp_frame(cfg, database, card_dir):
@@ -279,7 +289,7 @@ def test_finalize_picks_the_sharp_frame(cfg, database, card_dir):
     group = database.conn.execute("SELECT best_photo_id FROM groups").fetchone()
     best = database.get_photo(group["best_photo_id"])
     assert best["orig_name"] == "DSC00002.JPG"
-    assert best["rating"] == 3
+    assert best["rating"] == cfg.ratings.keep
 
 
 def test_finalize_rejects_black_frame_in_burst(cfg, database, card_dir):
@@ -291,7 +301,7 @@ def test_finalize_rejects_black_frame_in_burst(cfg, database, card_dir):
     finalize_ready_groups(cfg, database, force=True)
 
     rows = {r["orig_name"]: r for r in database.photos_in_state(dbmod.SCORED)}
-    assert rows["DSC00002.JPG"]["rating"] == 1
+    assert rows["DSC00002.JPG"]["rating"] == cfg.ratings.reject
     assert rows["DSC00002.JPG"]["label"] == cfg.deliver.label_reject
 
 

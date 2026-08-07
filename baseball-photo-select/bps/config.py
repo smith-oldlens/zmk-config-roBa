@@ -66,9 +66,28 @@ class AfConfig:
 
 
 @dataclass
+class RatingsConfig:
+    """Star values the tool writes, matched to the user's own convention.
+
+    The owner's existing catalog uses: 0 = not selected, 1 = selected,
+    2-5 = own child / more important than 1. The tool must speak that language
+    rather than impose its own, so these defaults follow it: confident keeps
+    get the user's "selected" star, decisive moments enter the "important"
+    band, and both rejects and review frames stay at 0 — telling them apart is
+    the colour label's job (reject=Purple, review=Yellow).
+    """
+
+    keep: int = 1
+    moment: int = 2
+    reject: int = 0
+    review: int = 0
+
+
+@dataclass
 class DeliverConfig:
     # Must match Lightroom's colour label set verbatim, in English (docs/04 §5).
     label_reject: str = "Purple"
+    label_review: str = "Yellow"
 
 
 @dataclass
@@ -94,6 +113,7 @@ class Config:
     sharpness: SharpnessConfig = field(default_factory=SharpnessConfig)
     moment: MomentConfig = field(default_factory=MomentConfig)
     af: AfConfig = field(default_factory=AfConfig)
+    ratings: RatingsConfig = field(default_factory=RatingsConfig)
     deliver: DeliverConfig = field(default_factory=DeliverConfig)
     notify: NotifyConfig = field(default_factory=NotifyConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -159,6 +179,7 @@ _SECTIONS: dict[str, type] = {
     "sharpness": SharpnessConfig,
     "moment": MomentConfig,
     "af": AfConfig,
+    "ratings": RatingsConfig,
     "deliver": DeliverConfig,
     "notify": NotifyConfig,
     "logging": LoggingConfig,
@@ -206,6 +227,16 @@ def _validate(cfg: Config) -> None:
         problems.append("af.tag_names must list at least one tag")
     if not cfg.deliver.label_reject:
         problems.append("deliver.label_reject must not be empty")
+    if not cfg.deliver.label_review:
+        problems.append("deliver.label_review must not be empty")
+    r = cfg.ratings
+    for name, value in (("keep", r.keep), ("moment", r.moment), ("reject", r.reject), ("review", r.review)):
+        if not 0 <= value <= 5:
+            problems.append(f"ratings.{name} must be within 0..5 (got {value})")
+    if r.keep <= r.reject or r.keep <= r.review:
+        problems.append("ratings.keep must be greater than ratings.reject and ratings.review")
+    if r.moment < r.keep:
+        problems.append("ratings.moment must be >= ratings.keep")
     if cfg.notify.enabled and not cfg.notify.topic:
         problems.append("notify.topic is required when notify.enabled is true")
     if problems:

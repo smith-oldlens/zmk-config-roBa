@@ -28,12 +28,6 @@ from .subject import Box, PersonDetector, find_subject
 
 log = get_logger("bps.scoring")
 
-RATING_BEST = 3
-RATING_MOMENT = 5
-RATING_KEEPER = 3
-RATING_REJECT = 1
-RATING_UNRATED = 0
-
 
 @dataclass
 class PhotoScore:
@@ -119,11 +113,19 @@ def score_photo(
 
 
 def decide_ratings(scores: list[PhotoScore], cfg: Config) -> PhotoScore | None:
-    """Assign stars across one finalised burst. Returns the best photo, if any."""
+    """Assign stars across one finalised burst. Returns the best photo, if any.
+
+    The output is deliberately three-way, in the owner's own star language
+    (config `ratings`, default: keep=1, moment=2, reject/review=0):
+      * keep / moment — confident selects, no human attention needed;
+      * reject (+ reject label) — confident discards, no attention needed;
+      * review (+ review label) — the only bucket a human ever looks at.
+    """
+    r = cfg.ratings
     for score in scores:
         if not score.exposure_ok:
             # The one unconditional rejection: a black or white frame (spec §6.1).
-            score.rating = RATING_REJECT
+            score.rating = r.reject
             score.label = cfg.deliver.label_reject
 
     usable = [s for s in scores if s.exposure_ok]
@@ -140,27 +142,31 @@ def decide_ratings(scores: list[PhotoScore], cfg: Config) -> PhotoScore | None:
     best = ranked[0]
     lone_frame = len(scores) == 1
     if lone_frame and best.sharp_pct < cfg.sharpness.reject_pct:
-        # Nothing to compare against and nothing to replace it with: leave it
-        # unrated rather than either promoting or rejecting it (spec §6.5 step 5).
-        best.rating = RATING_UNRATED
+        # Nothing to compare against and nothing to replace it with: hand it to
+        # the human rather than promote or reject it (spec §6.5 step 5).
+        best.rating = r.review
+        best.label = cfg.deliver.label_review
     elif best.moment >= cfg.moment.star5_threshold:
-        best.rating = RATING_MOMENT
+        best.rating = r.moment
     else:
-        best.rating = RATING_BEST
+        best.rating = r.keep
 
     for score in ranked[1:]:
         if score.sharp_pct >= cfg.sharpness.keeper_pct:
-            score.rating = RATING_KEEPER
+            score.rating = r.keep
 
-    has_alternative = any(s.rating is not None and s.rating >= RATING_KEEPER for s in usable)
+    has_alternative = any(
+        s.rating is not None and s.rating >= r.keep and s.label is None for s in usable
+    )
     for score in usable:
         if score.rating is not None:
             continue
         if score.sharp_pct < cfg.sharpness.reject_pct and has_alternative:
-            score.rating = RATING_REJECT
+            score.rating = r.reject
             score.label = cfg.deliver.label_reject
         else:
-            score.rating = RATING_UNRATED
+            score.rating = r.review
+            score.label = cfg.deliver.label_review
     return best
 
 

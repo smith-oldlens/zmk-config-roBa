@@ -118,7 +118,9 @@ def test_keepers_get_a_sidecar_and_a_list_entry(cfg, database, card_dir):
     run_pipeline(cfg, database, card_dir)
     deliver_scored(cfg, database)
 
-    keepers = [r for r in database.photos_in_state(dbmod.DELIVERED) if r["rating"] >= 3]
+    keepers = [
+        r for r in database.photos_in_state(dbmod.DELIVERED) if r["rating"] >= cfg.ratings.keep
+    ]
     assert keepers, "a burst must produce at least one keeper"
     selected = read_select_list(cfg)
     assert len(selected) == len(keepers)
@@ -141,7 +143,7 @@ def test_non_keepers_are_not_queued_for_raw_copy(cfg, database, card_dir):
     selected = read_select_list(cfg)
     for name, rating in delivered.items():
         arw = name.replace(".JPG", ".ARW")
-        assert (arw in selected) == (rating >= 3)
+        assert (arw in selected) == (rating >= cfg.ratings.keep)
 
 
 @needs_exiftool

@@ -36,8 +36,15 @@ af:                           # α7C II の AF タグ(M0 で実機確認して�
     - "MakerNotes:FlexibleSpotPosition"
     - "MakerNotes:FocalPlaneAFPointLocation"
 
+ratings:                      # ツールが書く星(あなたのカタログの規約に合わせる)
+  keep: 1                     # 自信を持って採用 = あなたの「セレクト」(★1)
+  moment: 2                   # 決定的瞬間 = あなたの「重要」帯の入口(★2)
+  reject: 0                   # 除外 = ★0。Purpleラベルで「ツールの判定」と分かる
+  review: 0                   # 要確認 = ★0 + Yellowラベル。人が見るのはここだけ
+
 deliver:
   label_reject: "Purple"      # LR のカラーラベルセット(英語名)と一致させること
+  label_review: "Yellow"      # 要確認バケツのラベル
 
 notify:                       # Phase 4(spec §11)
   enabled: false
