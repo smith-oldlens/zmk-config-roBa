@@ -11,6 +11,8 @@
 #define TOINT16(val, bits) (((struct { int16_t value : bits; }){val}).value)
 
 #include <zephyr/kernel.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/input/input.h>
 #include <zephyr/device.h>
@@ -30,44 +32,177 @@
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
 // ---------------------------------------------------------------------------
-// 実行時に変更可能な設定（カーソル速度＋加速度プリセット）
-// キーマップ上の &cpi_adjust / &accel_cycle ビヘイビアから呼ばれる。
-// 電源断で失われ、次回起動時は .conf のデフォルト値に戻る。
+// 実行時に変更可能な設定（カーソル速度＋加速度プリセット）。
+// キー操作とUSBプレビューはRAMだけ、USBの明示採用時だけSettingsへ保存する。
 // ---------------------------------------------------------------------------
 
-static uint32_t runtime_cpi = CONFIG_PMW3610_CPI;
+#define PMW3610_RUNTIME_SETTINGS_KEY "pmw3610/runtime"
+#define PMW3610_RUNTIME_SETTINGS_VERSION 2
+#ifdef CONFIG_PMW3610_ACCEL_ENABLE
+#define PMW3610_RUNTIME_DEFAULT_ACCEL CONFIG_PMW3610_RUNTIME_ACCEL_PRESET_DEFAULT
+#else
+#define PMW3610_RUNTIME_DEFAULT_ACCEL PMW3610_ACCEL_PRESET_OFF
+#endif
+
+struct pmw3610_runtime_persisted {
+    uint8_t version;
+    uint16_t cpi;
+    uint8_t accel_preset;
+    uint16_t firmware_default_cpi;
+    uint8_t firmware_default_accel;
+} __packed;
+
+static atomic_t runtime_cpi = ATOMIC_INIT(CONFIG_PMW3610_CPI);
+static atomic_t runtime_accel_preset = ATOMIC_INIT(PMW3610_RUNTIME_DEFAULT_ACCEL);
+static struct pmw3610_runtime_config saved_runtime_config = {
+    .cpi = CONFIG_PMW3610_CPI,
+    .accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL,
+};
+K_MUTEX_DEFINE(runtime_config_mutex);
+
+void pmw3610_runtime_get_current(struct pmw3610_runtime_config *config) {
+    config->cpi = (uint16_t)atomic_get(&runtime_cpi);
+    config->accel_preset = (uint8_t)atomic_get(&runtime_accel_preset);
+}
+
+void pmw3610_runtime_get_saved(struct pmw3610_runtime_config *config) {
+    k_mutex_lock(&runtime_config_mutex, K_FOREVER);
+    *config = saved_runtime_config;
+    k_mutex_unlock(&runtime_config_mutex);
+}
+
+void pmw3610_runtime_get_defaults(struct pmw3610_runtime_config *config) {
+    config->cpi = CONFIG_PMW3610_CPI;
+    config->accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL;
+}
+
+bool pmw3610_runtime_is_valid(const struct pmw3610_runtime_config *config) {
+    return config && config->cpi >= PMW3610_MIN_CPI && config->cpi <= PMW3610_MAX_CPI &&
+           (config->cpi % 200) == 0 && config->accel_preset < PMW3610_ACCEL_PRESET_COUNT;
+}
+
+bool pmw3610_runtime_is_dirty(void) {
+    struct pmw3610_runtime_config current;
+    struct pmw3610_runtime_config saved;
+    pmw3610_runtime_get_current(&current);
+    pmw3610_runtime_get_saved(&saved);
+    return current.cpi != saved.cpi || current.accel_preset != saved.accel_preset;
+}
+
+int pmw3610_runtime_set_preview(const struct pmw3610_runtime_config *config) {
+    if (!pmw3610_runtime_is_valid(config)) {
+        return -EINVAL;
+    }
+    atomic_set(&runtime_cpi, config->cpi);
+    atomic_set(&runtime_accel_preset, config->accel_preset);
+    return 0;
+}
+
+int pmw3610_runtime_save(const struct pmw3610_runtime_config *config) {
+    if (!pmw3610_runtime_is_valid(config)) {
+        return -EINVAL;
+    }
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+    const struct pmw3610_runtime_persisted persisted = {
+        .version = PMW3610_RUNTIME_SETTINGS_VERSION,
+        .cpi = config->cpi,
+        .accel_preset = config->accel_preset,
+        .firmware_default_cpi = CONFIG_PMW3610_CPI,
+        .firmware_default_accel = PMW3610_RUNTIME_DEFAULT_ACCEL,
+    };
+    int rc = settings_save_one(PMW3610_RUNTIME_SETTINGS_KEY, &persisted, sizeof(persisted));
+    if (rc < 0) {
+        return rc;
+    }
+#else
+    return -ENOTSUP;
+#endif
+
+    k_mutex_lock(&runtime_config_mutex, K_FOREVER);
+    saved_runtime_config = *config;
+    k_mutex_unlock(&runtime_config_mutex);
+    return pmw3610_runtime_set_preview(config);
+}
+
+void pmw3610_runtime_discard(void) {
+    struct pmw3610_runtime_config saved;
+    pmw3610_runtime_get_saved(&saved);
+    (void)pmw3610_runtime_set_preview(&saved);
+}
+
+void pmw3610_runtime_use_defaults(void) {
+    struct pmw3610_runtime_config defaults;
+    pmw3610_runtime_get_defaults(&defaults);
+    (void)pmw3610_runtime_set_preview(&defaults);
+}
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+static int pmw3610_runtime_settings_load_cb(const char *name, size_t len,
+                                             settings_read_cb read_cb, void *cb_arg) {
+    const char *next;
+    if (!settings_name_steq(name, "runtime", &next) || next) {
+        return -ENOENT;
+    }
+    if (len != sizeof(struct pmw3610_runtime_persisted)) {
+        return -EINVAL;
+    }
+
+    struct pmw3610_runtime_persisted persisted;
+    int rc = read_cb(cb_arg, &persisted, sizeof(persisted));
+    if (rc < 0) {
+        return rc;
+    }
+    if (rc != sizeof(persisted) || persisted.version != PMW3610_RUNTIME_SETTINGS_VERSION) {
+        return -EINVAL;
+    }
+
+    // .confを変更して新しいファームを書いた場合は、古いUSB保存値で
+    // 上書きせず、新しいファームウェア初期値を優先する。
+    if (persisted.firmware_default_cpi != CONFIG_PMW3610_CPI ||
+        persisted.firmware_default_accel != PMW3610_RUNTIME_DEFAULT_ACCEL) {
+        return 0;
+    }
+
+    const struct pmw3610_runtime_config config = {
+        .cpi = persisted.cpi,
+        .accel_preset = persisted.accel_preset,
+    };
+    if (!pmw3610_runtime_is_valid(&config)) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&runtime_config_mutex, K_FOREVER);
+    saved_runtime_config = config;
+    k_mutex_unlock(&runtime_config_mutex);
+    return pmw3610_runtime_set_preview(&config);
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(pmw3610_runtime, "pmw3610", NULL,
+                               pmw3610_runtime_settings_load_cb, NULL, NULL);
+#endif
 
 void pmw3610_cpi_adjust(int32_t delta) {
-    int32_t v = (int32_t)runtime_cpi + delta;
+    int32_t v = (int32_t)atomic_get(&runtime_cpi) + delta;
     if (v < PMW3610_MIN_CPI) {
         v = PMW3610_MIN_CPI;
     }
     if (v > PMW3610_MAX_CPI) {
         v = PMW3610_MAX_CPI;
     }
-    runtime_cpi = (uint32_t)v;
+    atomic_set(&runtime_cpi, v);
 }
 
 #ifdef CONFIG_PMW3610_ACCEL_ENABLE
-enum {
-    ACCEL_PRESET_OFF = 0,
-    ACCEL_PRESET_WEAK,
-    ACCEL_PRESET_MID,
-    ACCEL_PRESET_STRONG,
-    ACCEL_PRESET_COUNT,
-};
-
-static uint8_t runtime_accel_preset = ACCEL_PRESET_STRONG;
-
 static int32_t accel_max_factor_for_preset(uint8_t preset) {
     int32_t lo = CONFIG_PMW3610_ACCEL_MIN_FACTOR;
     int32_t hi = CONFIG_PMW3610_ACCEL_MAX_FACTOR;
     switch (preset) {
-    case ACCEL_PRESET_WEAK:
+    case PMW3610_ACCEL_PRESET_WEAK:
         return lo + (hi - lo) * 33 / 100;
-    case ACCEL_PRESET_MID:
+    case PMW3610_ACCEL_PRESET_MID:
         return lo + (hi - lo) * 66 / 100;
-    case ACCEL_PRESET_STRONG:
+    case PMW3610_ACCEL_PRESET_STRONG:
         return hi;
     default:
         return lo;
@@ -75,7 +210,8 @@ static int32_t accel_max_factor_for_preset(uint8_t preset) {
 }
 
 void pmw3610_accel_cycle(void) {
-    runtime_accel_preset = (runtime_accel_preset + 1) % ACCEL_PRESET_COUNT;
+    atomic_val_t current = atomic_get(&runtime_accel_preset);
+    atomic_set(&runtime_accel_preset, (current + 1) % PMW3610_ACCEL_PRESET_COUNT);
 }
 #else
 void pmw3610_accel_cycle(void) {}
@@ -663,7 +799,7 @@ static int pmw3610_report_data(const struct device *dev) {
     bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
     case MOVE:
-        set_cpi_if_needed(dev, runtime_cpi);
+        set_cpi_if_needed(dev, (uint32_t)atomic_get(&runtime_cpi));
         dividor = CONFIG_PMW3610_CPI_DIVIDOR;
         break;
     case SCROLL:
@@ -769,8 +905,9 @@ static int pmw3610_report_data(const struct device *dev) {
 #endif
 
 #ifdef CONFIG_PMW3610_ACCEL_ENABLE
-    if (input_mode == MOVE && runtime_accel_preset != ACCEL_PRESET_OFF) {
-        int32_t max_factor = accel_max_factor_for_preset(runtime_accel_preset);
+    uint8_t accel_preset = (uint8_t)atomic_get(&runtime_accel_preset);
+    if (input_mode == MOVE && accel_preset != PMW3610_ACCEL_PRESET_OFF) {
+        int32_t max_factor = accel_max_factor_for_preset(accel_preset);
         int32_t speed = abs(x) + abs(y);
         int32_t capped_speed = MIN(speed, CONFIG_PMW3610_ACCEL_SPEED_THRESHOLD);
         int32_t factor = CONFIG_PMW3610_ACCEL_MIN_FACTOR +
