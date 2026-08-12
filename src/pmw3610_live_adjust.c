@@ -15,6 +15,9 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zmk/event_manager.h>
+#include <zmk/events/position_state_changed.h>
+#include <zmk/keymap.h>
 
 #include "pmw3610_runtime.h"
 
@@ -23,7 +26,7 @@ LOG_MODULE_REGISTER(pmw3610_live_adjust, CONFIG_INPUT_LOG_LEVEL);
 #define LIVE_UART_NODE DT_CHOSEN(roba_live_adjust_uart)
 #define LIVE_PROTOCOL_VERSION 1
 #define LIVE_COMMAND_MAX 96
-#define LIVE_RESPONSE_MAX 196
+#define LIVE_RESPONSE_MAX 240
 
 BUILD_ASSERT(DT_HAS_CHOSEN(roba_live_adjust_uart),
              "CONFIG_PMW3610_LIVE_ADJUST requires roba,live-adjust-uart");
@@ -35,6 +38,9 @@ struct live_command {
 };
 
 K_MSGQ_DEFINE(live_command_queue, sizeof(struct live_command), 4, 4);
+
+static struct k_spinlock state_lock;
+static uint64_t pressed_positions;
 
 static char rx_line[LIVE_COMMAND_MAX];
 static size_t rx_len;
@@ -55,6 +61,21 @@ static void live_send_error(const char *code, const char *detail) {
     live_send(response);
 }
 
+static uint64_t live_pressed_snapshot(void) {
+    k_spinlock_key_t key = k_spin_lock(&state_lock);
+    uint64_t snapshot = pressed_positions;
+    k_spin_unlock(&state_lock, key);
+    return snapshot;
+}
+
+static void live_append_input_state(char *response, size_t response_size, size_t used) {
+    uint64_t pressed = live_pressed_snapshot();
+    snprintf(response + used, response_size - used,
+             " LAYER=%u PRESSED_HI=%08X PRESSED_LO=%08X",
+             (unsigned int)zmk_keymap_highest_layer_active(),
+             (unsigned int)(pressed >> 32), (unsigned int)pressed);
+}
+
 static void live_send_status(void) {
     struct pmw3610_runtime_config current;
     struct pmw3610_runtime_config saved;
@@ -64,12 +85,15 @@ static void live_send_status(void) {
     pmw3610_runtime_get_defaults(&defaults);
 
     char response[LIVE_RESPONSE_MAX];
-    snprintf(response, sizeof(response),
-             "ROBA1 OK PROTOCOL=%d DEVICE=roBa CPI=%u ACCEL=%u "
-             "SAVED_CPI=%u SAVED_ACCEL=%u DEFAULT_CPI=%u DEFAULT_ACCEL=%u DIRTY=%u",
-             LIVE_PROTOCOL_VERSION, current.cpi, current.accel_preset, saved.cpi,
-             saved.accel_preset, defaults.cpi, defaults.accel_preset,
-             pmw3610_runtime_is_dirty() ? 1 : 0);
+    int used = snprintf(response, sizeof(response),
+                        "ROBA1 OK PROTOCOL=%d DEVICE=roBa CPI=%u ACCEL=%u "
+                        "SAVED_CPI=%u SAVED_ACCEL=%u DEFAULT_CPI=%u DEFAULT_ACCEL=%u DIRTY=%u",
+                        LIVE_PROTOCOL_VERSION, current.cpi, current.accel_preset, saved.cpi,
+                        saved.accel_preset, defaults.cpi, defaults.accel_preset,
+                        pmw3610_runtime_is_dirty() ? 1 : 0);
+    if (used > 0 && (size_t)used < sizeof(response)) {
+        live_append_input_state(response, sizeof(response), (size_t)used);
+    }
     live_send(response);
 }
 
@@ -138,6 +162,25 @@ static void live_handle_command(const char *command) {
     }
     live_send_error("BAD_COMMAND", "unknown_command");
 }
+
+static int live_input_event_listener(const zmk_event_t *eh) {
+    const struct zmk_position_state_changed *position = as_zmk_position_state_changed(eh);
+    if (position && position->position < 64) {
+        k_spinlock_key_t key = k_spin_lock(&state_lock);
+        uint64_t bit = UINT64_C(1) << position->position;
+        if (position->state) {
+            pressed_positions |= bit;
+        } else {
+            pressed_positions &= ~bit;
+        }
+        k_spin_unlock(&state_lock, key);
+    }
+
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(pmw3610_live_input, live_input_event_listener);
+ZMK_SUBSCRIPTION(pmw3610_live_input, zmk_position_state_changed);
 
 static void live_serial_callback(const struct device *dev, void *user_data) {
     ARG_UNUSED(user_data);
