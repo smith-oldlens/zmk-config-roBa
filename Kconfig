@@ -202,6 +202,44 @@ config PMW3610_ACCEL_SPEED_THRESHOLD
     help
       Lower values reach max acceleration with a gentler flick.
 
+config PMW3610_RUNTIME_ACCEL_PRESET_DEFAULT
+    int "Default runtime acceleration preset (0=off, 1=weak, 2=mid, 3=strong)"
+    default 3
+    range 0 3
+    depends on PMW3610_ACCEL_ENABLE
+
+config PMW3610_RUNTIME_CPI_DEFAULT
+    int "Default effective runtime CPI"
+    default PMW3610_CPI
+    range 200 3200
+    help
+      Effective cursor CPI used in normal movement mode. Values in 50 CPI
+      steps are supported by combining the PMW3610's native 200 CPI step
+      with fractional software scaling.
+
+config PMW3610_LIVE_ADJUST
+    bool "Enable roBa USB live adjustment interface"
+    default n
+    depends on PMW3610_ACCEL_ENABLE
+    depends on USB_DEVICE_STACK
+    select USB_CDC_ACM
+    select UART_INTERRUPT_DRIVEN
+    select SETTINGS
+    help
+      Adds a dedicated CDC ACM serial interface for previewing and explicitly
+      saving the runtime CPI and acceleration preset. This is separate from
+      ZMK Studio's RPC interface.
+
+config PMW3610_LIVE_ADJUST_THREAD_STACK_SIZE
+    int "USB live adjustment worker stack size"
+    default 1024
+    depends on PMW3610_LIVE_ADJUST
+
+config PMW3610_LIVE_ADJUST_THREAD_PRIORITY
+    int "USB live adjustment worker priority"
+    default 10
+    depends on PMW3610_LIVE_ADJUST
+
 module = PMW3610
 module-str = PMW3610
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

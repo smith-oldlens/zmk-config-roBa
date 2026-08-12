@@ -1,0 +1,7 @@
+description: |
+  トラックボールのカーソルCPIを、押した瞬間に delta だけ増減させる（200〜3200にクランプ）。
+  電源を入れ直すと .conf のデフォルト値に戻る。
+
+compatible: "zmk,behavior-cpi-adjust"
+
+include: one_param.yaml

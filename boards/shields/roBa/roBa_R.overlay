@@ -16,10 +16,21 @@
 };
 
 / {
+    chosen {
+        roba,live-adjust-uart = &roba_live_adjust_uart;
+    };
+
     trackball_listener {
         status = "okay";
         compatible = "zmk,input-listener";
         device = <&trackball>;
+    };
+};
+
+// ZMK Studioとは別のCDC ACM。ライブ調整が失敗してもStudio/HIDを巻き込まない。
+&zephyr_udc0 {
+    roba_live_adjust_uart: roba_live_adjust_uart {
+        compatible = "zephyr,cdc-acm-uart";
     };
 };
 

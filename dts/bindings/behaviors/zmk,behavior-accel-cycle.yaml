@@ -1,0 +1,7 @@
+description: |
+  トラックボールの加速度プリセットを、押すたびに OFF -> 弱 -> 中 -> 強 -> OFF... と
+  循環させる。電源を入れ直すと .conf のデフォルト（強）に戻る。
+
+compatible: "zmk,behavior-accel-cycle"
+
+include: zero_param.yaml
