@@ -20,6 +20,8 @@ struct pmw3610_runtime_config {
     uint8_t accel_preset;
 };
 
+#define PMW3610_RUNTIME_CPI_STEP 50
+
 // カーソルCPIを delta だけ増減させる（200〜3200にクランプ）
 void pmw3610_cpi_adjust(int32_t delta);
 

@@ -113,7 +113,7 @@ static void live_handle_command(const char *command) {
         }
         int rc = pmw3610_runtime_set_preview(&config);
         if (rc < 0) {
-            live_send_error("RANGE", "CPI_200_to_3200_step_200_ACCEL_0_to_3");
+            live_send_error("RANGE", "CPI_200_to_3200_step_50_ACCEL_0_to_3");
             return;
         }
         live_send_status();
@@ -126,7 +126,7 @@ static void live_handle_command(const char *command) {
         }
         int rc = pmw3610_runtime_save(&config);
         if (rc == -EINVAL) {
-            live_send_error("RANGE", "CPI_200_to_3200_step_200_ACCEL_0_to_3");
+            live_send_error("RANGE", "CPI_200_to_3200_step_50_ACCEL_0_to_3");
             return;
         }
         if (rc < 0) {

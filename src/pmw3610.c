@@ -38,6 +38,13 @@ LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
 #define PMW3610_RUNTIME_SETTINGS_KEY "pmw3610/runtime"
 #define PMW3610_RUNTIME_SETTINGS_VERSION 2
+#define PMW3610_SENSOR_CPI_STEP 200
+BUILD_ASSERT((CONFIG_PMW3610_CPI % PMW3610_SENSOR_CPI_STEP) == 0,
+             "CONFIG_PMW3610_CPI must use the sensor's 200 CPI step");
+BUILD_ASSERT((CONFIG_PMW3610_SNIPE_CPI % PMW3610_SENSOR_CPI_STEP) == 0,
+             "CONFIG_PMW3610_SNIPE_CPI must use the sensor's 200 CPI step");
+BUILD_ASSERT((CONFIG_PMW3610_RUNTIME_CPI_DEFAULT % PMW3610_RUNTIME_CPI_STEP) == 0,
+             "CONFIG_PMW3610_RUNTIME_CPI_DEFAULT must use 50 CPI steps");
 #ifdef CONFIG_PMW3610_ACCEL_ENABLE
 #define PMW3610_RUNTIME_DEFAULT_ACCEL CONFIG_PMW3610_RUNTIME_ACCEL_PRESET_DEFAULT
 #else
@@ -52,10 +59,10 @@ struct pmw3610_runtime_persisted {
     uint8_t firmware_default_accel;
 } __packed;
 
-static atomic_t runtime_cpi = ATOMIC_INIT(CONFIG_PMW3610_CPI);
+static atomic_t runtime_cpi = ATOMIC_INIT(CONFIG_PMW3610_RUNTIME_CPI_DEFAULT);
 static atomic_t runtime_accel_preset = ATOMIC_INIT(PMW3610_RUNTIME_DEFAULT_ACCEL);
 static struct pmw3610_runtime_config saved_runtime_config = {
-    .cpi = CONFIG_PMW3610_CPI,
+    .cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT,
     .accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL,
 };
 K_MUTEX_DEFINE(runtime_config_mutex);
@@ -72,13 +79,14 @@ void pmw3610_runtime_get_saved(struct pmw3610_runtime_config *config) {
 }
 
 void pmw3610_runtime_get_defaults(struct pmw3610_runtime_config *config) {
-    config->cpi = CONFIG_PMW3610_CPI;
+    config->cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT;
     config->accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL;
 }
 
 bool pmw3610_runtime_is_valid(const struct pmw3610_runtime_config *config) {
     return config && config->cpi >= PMW3610_MIN_CPI && config->cpi <= PMW3610_MAX_CPI &&
-           (config->cpi % 200) == 0 && config->accel_preset < PMW3610_ACCEL_PRESET_COUNT;
+           (config->cpi % PMW3610_RUNTIME_CPI_STEP) == 0 &&
+           config->accel_preset < PMW3610_ACCEL_PRESET_COUNT;
 }
 
 bool pmw3610_runtime_is_dirty(void) {
@@ -108,7 +116,7 @@ int pmw3610_runtime_save(const struct pmw3610_runtime_config *config) {
         .version = PMW3610_RUNTIME_SETTINGS_VERSION,
         .cpi = config->cpi,
         .accel_preset = config->accel_preset,
-        .firmware_default_cpi = CONFIG_PMW3610_CPI,
+        .firmware_default_cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT,
         .firmware_default_accel = PMW3610_RUNTIME_DEFAULT_ACCEL,
     };
     int rc = settings_save_one(PMW3610_RUNTIME_SETTINGS_KEY, &persisted, sizeof(persisted));
@@ -159,7 +167,7 @@ static int pmw3610_runtime_settings_load_cb(const char *name, size_t len,
 
     // .confを変更して新しいファームを書いた場合は、古いUSB保存値で
     // 上書きせず、新しいファームウェア初期値を優先する。
-    if (persisted.firmware_default_cpi != CONFIG_PMW3610_CPI ||
+    if (persisted.firmware_default_cpi != CONFIG_PMW3610_RUNTIME_CPI_DEFAULT ||
         persisted.firmware_default_accel != PMW3610_RUNTIME_DEFAULT_ACCEL) {
         return 0;
     }
@@ -493,7 +501,8 @@ static int set_cpi(const struct device *dev, uint32_t cpi) {
      * :
      */
 
-    if ((cpi > PMW3610_MAX_CPI) || (cpi < PMW3610_MIN_CPI)) {
+    if ((cpi > PMW3610_MAX_CPI) || (cpi < PMW3610_MIN_CPI) ||
+        (cpi % PMW3610_SENSOR_CPI_STEP) != 0) {
         LOG_ERR("CPI value %u out of range", cpi);
         return -EINVAL;
     }
@@ -523,6 +532,38 @@ static int set_cpi_if_needed(const struct device *dev, uint32_t cpi) {
         return set_cpi(dev, cpi);
     }
     return 0;
+}
+
+static uint16_t sensor_cpi_for_effective_cpi(uint16_t effective_cpi) {
+    return (uint16_t)(((effective_cpi + PMW3610_SENSOR_CPI_STEP - 1) /
+                       PMW3610_SENSOR_CPI_STEP) * PMW3610_SENSOR_CPI_STEP);
+}
+
+static int16_t scale_move_axis(int16_t delta, uint16_t effective_cpi, uint16_t sensor_cpi,
+                               int32_t *remainder) {
+    int32_t scaled = (int32_t)delta * effective_cpi + *remainder;
+    int16_t result = (int16_t)(scaled / sensor_cpi);
+    *remainder = scaled - (int32_t)result * sensor_cpi;
+    return result;
+}
+
+static void scale_move_delta(struct pixart_data *data, int16_t *x, int16_t *y,
+                             uint16_t effective_cpi, uint16_t sensor_cpi,
+                             bool reset_remainder) {
+    if (reset_remainder || data->move_scale_cpi != effective_cpi) {
+        data->move_scale_cpi = effective_cpi;
+        data->move_scale_remainder_x = 0;
+        data->move_scale_remainder_y = 0;
+    }
+
+    if (effective_cpi == sensor_cpi) {
+        data->move_scale_remainder_x = 0;
+        data->move_scale_remainder_y = 0;
+        return;
+    }
+
+    *x = scale_move_axis(*x, effective_cpi, sensor_cpi, &data->move_scale_remainder_x);
+    *y = scale_move_axis(*y, effective_cpi, sensor_cpi, &data->move_scale_remainder_y);
 }
 
 /* Set sampling rate in each mode (in ms) */
@@ -795,11 +836,15 @@ static int pmw3610_report_data(const struct device *dev) {
     }
 
     int32_t dividor;
+    uint16_t effective_cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT;
+    uint16_t sensor_cpi = CONFIG_PMW3610_CPI;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
     bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
     case MOVE:
-        set_cpi_if_needed(dev, (uint32_t)atomic_get(&runtime_cpi));
+        effective_cpi = (uint16_t)atomic_get(&runtime_cpi);
+        sensor_cpi = sensor_cpi_for_effective_cpi(effective_cpi);
+        set_cpi_if_needed(dev, sensor_cpi);
         dividor = CONFIG_PMW3610_CPI_DIVIDOR;
         break;
     case SCROLL:
@@ -903,6 +948,10 @@ static int pmw3610_report_data(const struct device *dev) {
         data->last_y = 0;
     }
 #endif
+
+    if (input_mode == MOVE) {
+        scale_move_delta(data, &x, &y, effective_cpi, sensor_cpi, input_mode_changed);
+    }
 
 #ifdef CONFIG_PMW3610_ACCEL_ENABLE
     uint8_t accel_preset = (uint8_t)atomic_get(&runtime_accel_preset);

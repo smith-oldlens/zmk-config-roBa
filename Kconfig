@@ -208,6 +208,15 @@ config PMW3610_RUNTIME_ACCEL_PRESET_DEFAULT
     range 0 3
     depends on PMW3610_ACCEL_ENABLE
 
+config PMW3610_RUNTIME_CPI_DEFAULT
+    int "Default effective runtime CPI"
+    default PMW3610_CPI
+    range 200 3200
+    help
+      Effective cursor CPI used in normal movement mode. Values in 50 CPI
+      steps are supported by combining the PMW3610's native 200 CPI step
+      with fractional software scaling.
+
 config PMW3610_LIVE_ADJUST
     bool "Enable roBa USB live adjustment interface"
     default n
