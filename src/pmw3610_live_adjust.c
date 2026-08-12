@@ -15,10 +15,7 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/atomic.h>
-
 #include <zmk/event_manager.h>
-#include <zmk/events/layer_state_changed.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/keymap.h>
 
@@ -41,9 +38,7 @@ struct live_command {
 };
 
 K_MSGQ_DEFINE(live_command_queue, sizeof(struct live_command), 4, 4);
-K_SEM_DEFINE(live_event_sem, 0, 1);
 
-static atomic_t watch_enabled;
 static struct k_spinlock state_lock;
 static uint64_t pressed_positions;
 
@@ -102,26 +97,6 @@ static void live_send_status(void) {
     live_send(response);
 }
 
-static bool live_host_is_listening(void) {
-    uint32_t dtr = 0;
-    return atomic_get(&watch_enabled) != 0 &&
-           uart_line_ctrl_get(live_uart, UART_LINE_CTRL_DTR, &dtr) == 0 && dtr != 0;
-}
-
-static void live_send_input_event(void) {
-    if (!live_host_is_listening()) {
-        return;
-    }
-
-    uint64_t pressed = live_pressed_snapshot();
-    char response[LIVE_RESPONSE_MAX];
-    snprintf(response, sizeof(response),
-             "ROBA1 EVENT LAYER=%u PRESSED_HI=%08X PRESSED_LO=%08X",
-             (unsigned int)zmk_keymap_highest_layer_active(),
-             (unsigned int)(pressed >> 32), (unsigned int)pressed);
-    live_send(response);
-}
-
 static bool live_parse_values(const char *text, const char *verb,
                               struct pmw3610_runtime_config *config) {
     unsigned int cpi;
@@ -145,17 +120,6 @@ static void live_handle_command(const char *command) {
     }
     if (strcmp(command, "ROBA1 DISCARD") == 0) {
         pmw3610_runtime_discard();
-        live_send_status();
-        return;
-    }
-    if (strcmp(command, "ROBA1 WATCH ON") == 0) {
-        atomic_set(&watch_enabled, 1);
-        live_send_status();
-        k_sem_give(&live_event_sem);
-        return;
-    }
-    if (strcmp(command, "ROBA1 WATCH OFF") == 0) {
-        atomic_clear(&watch_enabled);
         live_send_status();
         return;
     }
@@ -212,17 +176,11 @@ static int live_input_event_listener(const zmk_event_t *eh) {
         k_spin_unlock(&state_lock, key);
     }
 
-    if (position || as_zmk_layer_state_changed(eh)) {
-        if (atomic_get(&watch_enabled) != 0) {
-            k_sem_give(&live_event_sem);
-        }
-    }
     return ZMK_EV_EVENT_BUBBLE;
 }
 
 ZMK_LISTENER(pmw3610_live_input, live_input_event_listener);
 ZMK_SUBSCRIPTION(pmw3610_live_input, zmk_position_state_changed);
-ZMK_SUBSCRIPTION(pmw3610_live_input, zmk_layer_state_changed);
 
 static void live_serial_callback(const struct device *dev, void *user_data) {
     ARG_UNUSED(user_data);
@@ -269,15 +227,12 @@ static void live_serial_callback(const struct device *dev, void *user_data) {
 static void live_adjust_thread(void) {
     struct live_command command;
     for (;;) {
-        int rc = k_msgq_get(&live_command_queue, &command, K_MSEC(10));
-        if (rc == 0) {
-            live_handle_command(command.text);
-        } else if (rc != -EAGAIN) {
+        int rc = k_msgq_get(&live_command_queue, &command, K_FOREVER);
+        if (rc < 0) {
             LOG_WRN("USB live queue read failed: %d", rc);
+            continue;
         }
-        if (k_sem_take(&live_event_sem, K_NO_WAIT) == 0) {
-            live_send_input_event();
-        }
+        live_handle_command(command.text);
     }
 }
 
