@@ -24,9 +24,9 @@
 LOG_MODULE_REGISTER(pmw3610_live_adjust, CONFIG_INPUT_LOG_LEVEL);
 
 #define LIVE_UART_NODE DT_CHOSEN(roba_live_adjust_uart)
-#define LIVE_PROTOCOL_VERSION 1
+#define LIVE_PROTOCOL_VERSION 2
 #define LIVE_COMMAND_MAX 96
-#define LIVE_RESPONSE_MAX 240
+#define LIVE_RESPONSE_MAX 384
 
 BUILD_ASSERT(DT_HAS_CHOSEN(roba_live_adjust_uart),
              "CONFIG_PMW3610_LIVE_ADJUST requires roba,live-adjust-uart");
@@ -87,9 +87,14 @@ static void live_send_status(void) {
     char response[LIVE_RESPONSE_MAX];
     int used = snprintf(response, sizeof(response),
                         "ROBA1 OK PROTOCOL=%d DEVICE=roBa CPI=%u ACCEL=%u "
-                        "SAVED_CPI=%u SAVED_ACCEL=%u DEFAULT_CPI=%u DEFAULT_ACCEL=%u DIRTY=%u",
+                        "SAVED_CPI=%u SAVED_ACCEL=%u DEFAULT_CPI=%u DEFAULT_ACCEL=%u "
+                        "SNIPE_CPI=%u SNIPE_DIVISOR=%u SAVED_SNIPE_CPI=%u "
+                        "SAVED_SNIPE_DIVISOR=%u DEFAULT_SNIPE_CPI=%u "
+                        "DEFAULT_SNIPE_DIVISOR=%u DIRTY=%u",
                         LIVE_PROTOCOL_VERSION, current.cpi, current.accel_preset, saved.cpi,
                         saved.accel_preset, defaults.cpi, defaults.accel_preset,
+                        current.snipe_cpi, current.snipe_divisor, saved.snipe_cpi,
+                        saved.snipe_divisor, defaults.snipe_cpi, defaults.snipe_divisor,
                         pmw3610_runtime_is_dirty() ? 1 : 0);
     if (used > 0 && (size_t)used < sizeof(response)) {
         live_append_input_state(response, sizeof(response), (size_t)used);
@@ -101,15 +106,31 @@ static bool live_parse_values(const char *text, const char *verb,
                               struct pmw3610_runtime_config *config) {
     unsigned int cpi;
     unsigned int accel;
-    char extra;
     char format[48];
-    snprintf(format, sizeof(format), "ROBA1 %s CPI=%%u ACCEL=%%u %%c", verb);
-    int matched = sscanf(text, format, &cpi, &accel, &extra);
-    if (matched != 2 || cpi > UINT16_MAX || accel > UINT8_MAX) {
+    snprintf(format, sizeof(format), "ROBA1 %s CPI=%%u ACCEL=%%u", verb);
+    if (sscanf(text, format, &cpi, &accel) != 2 || cpi > UINT16_MAX || accel > UINT8_MAX) {
         return false;
     }
+
+    pmw3610_runtime_get_current(config);
     config->cpi = (uint16_t)cpi;
     config->accel_preset = (uint8_t)accel;
+
+    const char *snipe_cpi_text = strstr(text, "SNIPE_CPI=");
+    const char *snipe_divisor_text = strstr(text, "SNIPE_DIVISOR=");
+    if (snipe_cpi_text == NULL && snipe_divisor_text == NULL) {
+        return true;
+    }
+    unsigned int snipe_cpi;
+    unsigned int snipe_divisor;
+    if (snipe_cpi_text == NULL || snipe_divisor_text == NULL ||
+        sscanf(snipe_cpi_text, "SNIPE_CPI=%u", &snipe_cpi) != 1 ||
+        sscanf(snipe_divisor_text, "SNIPE_DIVISOR=%u", &snipe_divisor) != 1 ||
+        snipe_cpi > UINT16_MAX || snipe_divisor > UINT8_MAX) {
+        return false;
+    }
+    config->snipe_cpi = (uint16_t)snipe_cpi;
+    config->snipe_divisor = (uint8_t)snipe_divisor;
     return true;
 }
 
@@ -132,12 +153,12 @@ static void live_handle_command(const char *command) {
     struct pmw3610_runtime_config config;
     if (strncmp(command, "ROBA1 PREVIEW ", 14) == 0) {
         if (!live_parse_values(command, "PREVIEW", &config)) {
-            live_send_error("BAD_COMMAND", "expected_CPI_and_ACCEL");
+            live_send_error("BAD_COMMAND", "expected_CPI_ACCEL_and_optional_SNIPE_values");
             return;
         }
         int rc = pmw3610_runtime_set_preview(&config);
         if (rc < 0) {
-            live_send_error("RANGE", "CPI_200_to_3200_step_50_ACCEL_0_to_3");
+            live_send_error("RANGE", "CPI_200_to_3200_step_50_SNIPE_CPI_200_to_3200_step_200_DIVISOR_1_to_100_ACCEL_0_to_3");
             return;
         }
         live_send_status();
@@ -145,12 +166,12 @@ static void live_handle_command(const char *command) {
     }
     if (strncmp(command, "ROBA1 COMMIT ", 13) == 0) {
         if (!live_parse_values(command, "COMMIT", &config)) {
-            live_send_error("BAD_COMMAND", "expected_CPI_and_ACCEL");
+            live_send_error("BAD_COMMAND", "expected_CPI_ACCEL_and_optional_SNIPE_values");
             return;
         }
         int rc = pmw3610_runtime_save(&config);
         if (rc == -EINVAL) {
-            live_send_error("RANGE", "CPI_200_to_3200_step_50_ACCEL_0_to_3");
+            live_send_error("RANGE", "CPI_200_to_3200_step_50_SNIPE_CPI_200_to_3200_step_200_DIVISOR_1_to_100_ACCEL_0_to_3");
             return;
         }
         if (rc < 0) {

@@ -18,9 +18,14 @@ enum pmw3610_accel_preset {
 struct pmw3610_runtime_config {
     uint16_t cpi;
     uint8_t accel_preset;
+    uint16_t snipe_cpi;
+    uint8_t snipe_divisor;
 };
 
 #define PMW3610_RUNTIME_CPI_STEP 50
+#define PMW3610_RUNTIME_SNIPE_CPI_STEP 200
+#define PMW3610_RUNTIME_SNIPE_DIVISOR_MIN 1
+#define PMW3610_RUNTIME_SNIPE_DIVISOR_MAX 100
 
 // カーソルCPIを delta だけ増減させる（200〜3200にクランプ）
 void pmw3610_cpi_adjust(int32_t delta);

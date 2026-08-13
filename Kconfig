@@ -227,8 +227,9 @@ config PMW3610_LIVE_ADJUST
     select SETTINGS
     help
       Adds a dedicated CDC ACM serial interface for previewing and explicitly
-      saving the runtime CPI and acceleration preset. This is separate from
-      ZMK Studio's RPC interface.
+      saving the runtime CPI, acceleration preset, and SNIPE settings. This is
+      separate from ZMK Studio's RPC interface. Protocol v2 adds the SNIPE
+      fields while retaining compatibility with the normal CPI commands.
 
 config PMW3610_LIVE_ADJUST_THREAD_STACK_SIZE
     int "USB live adjustment worker stack size"

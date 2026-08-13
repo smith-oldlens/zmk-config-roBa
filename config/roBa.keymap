@@ -12,6 +12,7 @@
 };
 
 &trackball {
+    automouse-layer = <4>;
     scroll-layers = <5>;
     snipe-layers = <8>;
     // ジェスチャー(ball action)は roBa_R.overlay の trackball@0 内に定義（子ノードはoverlayが正しい置き場所）

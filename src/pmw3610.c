@@ -37,7 +37,7 @@ LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 // ---------------------------------------------------------------------------
 
 #define PMW3610_RUNTIME_SETTINGS_KEY "pmw3610/runtime"
-#define PMW3610_RUNTIME_SETTINGS_VERSION 2
+#define PMW3610_RUNTIME_SETTINGS_VERSION 3
 #define PMW3610_SENSOR_CPI_STEP 200
 BUILD_ASSERT((CONFIG_PMW3610_CPI % PMW3610_SENSOR_CPI_STEP) == 0,
              "CONFIG_PMW3610_CPI must use the sensor's 200 CPI step");
@@ -55,21 +55,39 @@ struct pmw3610_runtime_persisted {
     uint8_t version;
     uint16_t cpi;
     uint8_t accel_preset;
+    uint16_t snipe_cpi;
+    uint8_t snipe_divisor;
+    uint16_t firmware_default_cpi;
+    uint8_t firmware_default_accel;
+    uint16_t firmware_default_snipe_cpi;
+    uint8_t firmware_default_snipe_divisor;
+} __packed;
+
+struct pmw3610_runtime_persisted_v2 {
+    uint8_t version;
+    uint16_t cpi;
+    uint8_t accel_preset;
     uint16_t firmware_default_cpi;
     uint8_t firmware_default_accel;
 } __packed;
 
 static atomic_t runtime_cpi = ATOMIC_INIT(CONFIG_PMW3610_RUNTIME_CPI_DEFAULT);
 static atomic_t runtime_accel_preset = ATOMIC_INIT(PMW3610_RUNTIME_DEFAULT_ACCEL);
+static atomic_t runtime_snipe_cpi = ATOMIC_INIT(CONFIG_PMW3610_SNIPE_CPI);
+static atomic_t runtime_snipe_divisor = ATOMIC_INIT(CONFIG_PMW3610_SNIPE_CPI_DIVIDOR);
 static struct pmw3610_runtime_config saved_runtime_config = {
     .cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT,
     .accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL,
+    .snipe_cpi = CONFIG_PMW3610_SNIPE_CPI,
+    .snipe_divisor = CONFIG_PMW3610_SNIPE_CPI_DIVIDOR,
 };
 K_MUTEX_DEFINE(runtime_config_mutex);
 
 void pmw3610_runtime_get_current(struct pmw3610_runtime_config *config) {
     config->cpi = (uint16_t)atomic_get(&runtime_cpi);
     config->accel_preset = (uint8_t)atomic_get(&runtime_accel_preset);
+    config->snipe_cpi = (uint16_t)atomic_get(&runtime_snipe_cpi);
+    config->snipe_divisor = (uint8_t)atomic_get(&runtime_snipe_divisor);
 }
 
 void pmw3610_runtime_get_saved(struct pmw3610_runtime_config *config) {
@@ -81,12 +99,18 @@ void pmw3610_runtime_get_saved(struct pmw3610_runtime_config *config) {
 void pmw3610_runtime_get_defaults(struct pmw3610_runtime_config *config) {
     config->cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT;
     config->accel_preset = PMW3610_RUNTIME_DEFAULT_ACCEL;
+    config->snipe_cpi = CONFIG_PMW3610_SNIPE_CPI;
+    config->snipe_divisor = CONFIG_PMW3610_SNIPE_CPI_DIVIDOR;
 }
 
 bool pmw3610_runtime_is_valid(const struct pmw3610_runtime_config *config) {
     return config && config->cpi >= PMW3610_MIN_CPI && config->cpi <= PMW3610_MAX_CPI &&
            (config->cpi % PMW3610_RUNTIME_CPI_STEP) == 0 &&
-           config->accel_preset < PMW3610_ACCEL_PRESET_COUNT;
+           config->accel_preset < PMW3610_ACCEL_PRESET_COUNT &&
+           config->snipe_cpi >= PMW3610_MIN_CPI && config->snipe_cpi <= PMW3610_MAX_CPI &&
+           (config->snipe_cpi % PMW3610_RUNTIME_SNIPE_CPI_STEP) == 0 &&
+           config->snipe_divisor >= PMW3610_RUNTIME_SNIPE_DIVISOR_MIN &&
+           config->snipe_divisor <= PMW3610_RUNTIME_SNIPE_DIVISOR_MAX;
 }
 
 bool pmw3610_runtime_is_dirty(void) {
@@ -94,7 +118,9 @@ bool pmw3610_runtime_is_dirty(void) {
     struct pmw3610_runtime_config saved;
     pmw3610_runtime_get_current(&current);
     pmw3610_runtime_get_saved(&saved);
-    return current.cpi != saved.cpi || current.accel_preset != saved.accel_preset;
+    return current.cpi != saved.cpi || current.accel_preset != saved.accel_preset ||
+           current.snipe_cpi != saved.snipe_cpi ||
+           current.snipe_divisor != saved.snipe_divisor;
 }
 
 int pmw3610_runtime_set_preview(const struct pmw3610_runtime_config *config) {
@@ -103,6 +129,8 @@ int pmw3610_runtime_set_preview(const struct pmw3610_runtime_config *config) {
     }
     atomic_set(&runtime_cpi, config->cpi);
     atomic_set(&runtime_accel_preset, config->accel_preset);
+    atomic_set(&runtime_snipe_cpi, config->snipe_cpi);
+    atomic_set(&runtime_snipe_divisor, config->snipe_divisor);
     return 0;
 }
 
@@ -116,8 +144,12 @@ int pmw3610_runtime_save(const struct pmw3610_runtime_config *config) {
         .version = PMW3610_RUNTIME_SETTINGS_VERSION,
         .cpi = config->cpi,
         .accel_preset = config->accel_preset,
+        .snipe_cpi = config->snipe_cpi,
+        .snipe_divisor = config->snipe_divisor,
         .firmware_default_cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT,
         .firmware_default_accel = PMW3610_RUNTIME_DEFAULT_ACCEL,
+        .firmware_default_snipe_cpi = CONFIG_PMW3610_SNIPE_CPI,
+        .firmware_default_snipe_divisor = CONFIG_PMW3610_SNIPE_CPI_DIVIDOR,
     };
     int rc = settings_save_one(PMW3610_RUNTIME_SETTINGS_KEY, &persisted, sizeof(persisted));
     if (rc < 0) {
@@ -152,30 +184,48 @@ static int pmw3610_runtime_settings_load_cb(const char *name, size_t len,
     if (!settings_name_steq(name, "runtime", &next) || next) {
         return -ENOENT;
     }
-    if (len != sizeof(struct pmw3610_runtime_persisted)) {
+    if (len != sizeof(struct pmw3610_runtime_persisted) &&
+        len != sizeof(struct pmw3610_runtime_persisted_v2)) {
         return -EINVAL;
     }
 
-    struct pmw3610_runtime_persisted persisted;
-    int rc = read_cb(cb_arg, &persisted, sizeof(persisted));
+    uint8_t raw[sizeof(struct pmw3610_runtime_persisted)];
+    int rc = read_cb(cb_arg, raw, len);
     if (rc < 0) {
         return rc;
     }
-    if (rc != sizeof(persisted) || persisted.version != PMW3610_RUNTIME_SETTINGS_VERSION) {
+    if (rc != len) {
         return -EINVAL;
     }
 
-    // .confを変更して新しいファームを書いた場合は、古いUSB保存値で
-    // 上書きせず、新しいファームウェア初期値を優先する。
-    if (persisted.firmware_default_cpi != CONFIG_PMW3610_RUNTIME_CPI_DEFAULT ||
-        persisted.firmware_default_accel != PMW3610_RUNTIME_DEFAULT_ACCEL) {
-        return 0;
+    struct pmw3610_runtime_config config;
+    pmw3610_runtime_get_defaults(&config);
+    if (len == sizeof(struct pmw3610_runtime_persisted_v2)) {
+        const struct pmw3610_runtime_persisted_v2 *persisted =
+            (const struct pmw3610_runtime_persisted_v2 *)raw;
+        if (persisted->version != 2 ||
+            persisted->firmware_default_cpi != CONFIG_PMW3610_RUNTIME_CPI_DEFAULT ||
+            persisted->firmware_default_accel != PMW3610_RUNTIME_DEFAULT_ACCEL) {
+            return 0;
+        }
+        config.cpi = persisted->cpi;
+        config.accel_preset = persisted->accel_preset;
+    } else {
+        const struct pmw3610_runtime_persisted *persisted =
+            (const struct pmw3610_runtime_persisted *)raw;
+        if (persisted->version != PMW3610_RUNTIME_SETTINGS_VERSION ||
+            persisted->firmware_default_cpi != CONFIG_PMW3610_RUNTIME_CPI_DEFAULT ||
+            persisted->firmware_default_accel != PMW3610_RUNTIME_DEFAULT_ACCEL ||
+            persisted->firmware_default_snipe_cpi != CONFIG_PMW3610_SNIPE_CPI ||
+            persisted->firmware_default_snipe_divisor != CONFIG_PMW3610_SNIPE_CPI_DIVIDOR) {
+            return 0;
+        }
+        config.cpi = persisted->cpi;
+        config.accel_preset = persisted->accel_preset;
+        config.snipe_cpi = persisted->snipe_cpi;
+        config.snipe_divisor = persisted->snipe_divisor;
     }
 
-    const struct pmw3610_runtime_config config = {
-        .cpi = persisted.cpi,
-        .accel_preset = persisted.accel_preset,
-    };
     if (!pmw3610_runtime_is_valid(&config)) {
         return -EINVAL;
     }
@@ -838,6 +888,7 @@ static int pmw3610_report_data(const struct device *dev) {
     int32_t dividor;
     uint16_t effective_cpi = CONFIG_PMW3610_RUNTIME_CPI_DEFAULT;
     uint16_t sensor_cpi = CONFIG_PMW3610_CPI;
+    uint16_t snipe_cpi = CONFIG_PMW3610_SNIPE_CPI;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
     bool input_mode_changed = data->curr_mode != input_mode;
     switch (input_mode) {
@@ -856,8 +907,9 @@ static int pmw3610_report_data(const struct device *dev) {
         dividor = 1; // this should be handled with the ticks rather than dividors
         break;
     case SNIPE:
-        set_cpi_if_needed(dev, CONFIG_PMW3610_SNIPE_CPI);
-        dividor = CONFIG_PMW3610_SNIPE_CPI_DIVIDOR;
+        snipe_cpi = (uint16_t)atomic_get(&runtime_snipe_cpi);
+        set_cpi_if_needed(dev, snipe_cpi);
+        dividor = (int32_t)atomic_get(&runtime_snipe_divisor);
         break;
     case BALL_ACTION:
         set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
