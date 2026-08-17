@@ -54,7 +54,10 @@ self.addEventListener('fetch', (e) => {
     try {
       const res = await fetch(e.request);
       const cache = await caches.open(CACHE);
-      cache.put(e.request, res.clone());
+      // 書き込みを待たずに返すと、respondWith の解決後にワーカーが終了して
+      // キャッシュ更新が反映されないことがある（「更新したのに古いまま」の原因）。
+      // 200番台のみキャッシュし、一時的なエラー応答を固定化しないようにする。
+      if (res.ok) await cache.put(e.request, res.clone());
       return res;
     } catch {
       const hit = await caches.match(e.request);
