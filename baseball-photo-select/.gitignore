@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data / models (not committed; fetched or generated locally)
+models/*.onnx
+models/*.pkl
+models/*.npz
+*.db
+*.db-wal
+*.db-shm
+
+# M0 local outputs
+scripts/m0_test/
+docs/af-tag-samples/*.json
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "baseball-photo-select"
+version = "0.1.0"
+description = "Wireless tether to Lightroom with AI culling for youth baseball photography"
+requires-python = ">=3.11"
+
+# Runtime dependencies. License policy (docs/01 §6): Apache / MIT / BSD only.
+# No AGPL packages (that rules out ultralytics), no torch at runtime.
+dependencies = [
+    "pyyaml",       # MIT   - config
+    "piexif",       # MIT   - fast EXIF read during ingest
+    "numpy",        # BSD-3
+    "watchdog",     # Apache-2.0 - inbox monitoring (M4)
+    "pyexiftool",   # BSD-3 - exiftool -stay_open wrapper (M3)
+    "opencv-python-headless",  # Apache-2.0 - scoring (M2)
+    "onnxruntime",  # MIT   - all inference (M2/M5)
+]
+
+[project.optional-dependencies]
+# Phase 3 on-device personalisation: embeddings come from ONNX, the classifier
+# is scikit-learn, so no torch is needed on a customer machine.
+ml = ["scikit-learn"]
+# Developer-only: converting models to ONNX and building the shipped classifier.
+# Never a runtime/distribution dependency (docs/01 §6, docs/05 §2).
+dev-ml = ["torch", "open_clip_torch"]
+dev = ["pytest", "pillow"]
+
+[project.scripts]
+bps = "bps.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bps*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: needs ONNX models or real hardware"]
