@@ -2,20 +2,10 @@ manifest:
   remotes:
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
-    - name: zzeneg
-      url-base: https://github.com/zzeneg
-    - name: srwi
-      url-base: https://github.com/srwi
   projects:
     - name: zmk
       remote: zmkfirmware
       revision: v0.3
       import: app/west.yml
-    - name: zmk-raw-hid
-      remote: zzeneg
-      revision: 6a37765dfab6197292e7a9f47305dcf87386d56a
-    - name: zmk-keypeek-layer-notifier
-      remote: srwi
-      revision: b600af3bb7d1795073a4ce23e08d6db46371551b
   self:
     path: config
